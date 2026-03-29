@@ -10,6 +10,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from pathlib import Path
 import json
+import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, date, timedelta
 import uvicorn
 import openpyxl
@@ -36,21 +38,125 @@ def render(template_name: str, **ctx) -> HTMLResponse:
 # Lokalt bruker vi puls/data/
 DATA_DIR = Path("/home/data") if os.environ.get("WEBSITE_SITE_NAME") else BASE / "data"
 DATA_DIR.mkdir(exist_ok=True)
-SVAR_FIL      = DATA_DIR / "svar.json"
-BRUKERE_FIL   = DATA_DIR / "brukere.json"
-INV_FIL       = DATA_DIR / "investeringer.json"
-FAKTA_FIL     = DATA_DIR / "fakta_puls.xlsx"
+DB_FIL   = DATA_DIR / "puls.db"
+FAKTA_FIL = DATA_DIR / "fakta_puls.xlsx"
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+@contextmanager
+def db():
+    con = sqlite3.connect(DB_FIL)
+    con.row_factory = sqlite3.Row
+    try:
+        yield con
+        con.commit()
+    finally:
+        con.close()
+
+def init_db():
+    with db() as con:
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS brukere (
+                token TEXT PRIMARY KEY,
+                navn  TEXT NOT NULL,
+                epost TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS investeringer (
+                navn      TEXT PRIMARY KEY,
+                rekkefølge INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS svar (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                token     TEXT NOT NULL,
+                navn      TEXT NOT NULL,
+                epost     TEXT NOT NULL,
+                uke       INTEGER NOT NULL,
+                år        INTEGER NOT NULL,
+                fravar    INTEGER NOT NULL DEFAULT 0,
+                timer     TEXT NOT NULL DEFAULT '{}',
+                total     REAL NOT NULL DEFAULT 0,
+                tidspunkt TEXT NOT NULL,
+                UNIQUE(token, uke, år)
+            );
+        """)
+
+init_db()
+
+# ── DB-hjelpefunksjoner ───────────────────────────────────────────────────────
+
+DEFAULT_INVESTERINGER = [
+    "SalMar", "Sinkaberg-Hansen", "BEWi", "Arctic Fish",
+    "Kingfish Company", "Kvarv", "Kverva-møter", "Admin / Annet",
+]
 
 def les_investeringer() -> list:
-    return les_json(INV_FIL, [
-        "SalMar", "Sinkaberg-Hansen", "BEWi", "Arctic Fish",
-        "Kingfish Company", "Kvarv", "Kverva-møter", "Admin / Annet",
-    ])
+    with db() as con:
+        rader = con.execute("SELECT navn FROM investeringer ORDER BY rekkefølge").fetchall()
+    if not rader:
+        return DEFAULT_INVESTERINGER
+    return [r["navn"] for r in rader]
+
+def lagre_investeringer(liste: list):
+    with db() as con:
+        con.execute("DELETE FROM investeringer")
+        for i, navn in enumerate(liste):
+            con.execute("INSERT OR REPLACE INTO investeringer (navn, rekkefølge) VALUES (?,?)", (navn, i))
+
+def finn_bruker(token: str):
+    with db() as con:
+        r = con.execute("SELECT navn, epost FROM brukere WHERE token=?", (token,)).fetchone()
+    return dict(r) if r else None
+
+def hent_alle_brukere() -> dict:
+    with db() as con:
+        rader = con.execute("SELECT token, navn, epost FROM brukere").fetchall()
+    return {r["token"]: {"navn": r["navn"], "epost": r["epost"]} for r in rader}
+
+def lagre_bruker(token: str, navn: str, epost: str):
+    with db() as con:
+        con.execute("INSERT OR REPLACE INTO brukere (token, navn, epost) VALUES (?,?,?)", (token, navn, epost))
+
+def fjern_bruker(token: str) -> str:
+    with db() as con:
+        r = con.execute("SELECT navn FROM brukere WHERE token=?", (token,)).fetchone()
+        navn = r["navn"] if r else token
+        con.execute("DELETE FROM brukere WHERE token=?", (token,))
+    return navn
+
+def _rad_til_svar(r) -> dict:
+    return {
+        "token": r["token"],
+        "navn": r["navn"],
+        "epost": r["epost"],
+        "uke": r["uke"],
+        "år": r["år"],
+        "fravær": bool(r["fravar"]),
+        "timer": json.loads(r["timer"]),
+        "total": r["total"],
+        "tidspunkt": r["tidspunkt"],
+    }
+
+def hent_alle_svar() -> list:
+    with db() as con:
+        rader = con.execute("SELECT * FROM svar ORDER BY tidspunkt").fetchall()
+    return [_rad_til_svar(r) for r in rader]
+
+def upsert_svar(token, navn, epost, uke, år, fravar, timer, total, tidspunkt):
+    with db() as con:
+        con.execute("""
+            INSERT INTO svar (token, navn, epost, uke, år, fravar, timer, total, tidspunkt)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(token, uke, år) DO UPDATE SET
+                navn=excluded.navn, epost=excluded.epost,
+                fravar=excluded.fravar, timer=excluded.timer,
+                total=excluded.total, tidspunkt=excluded.tidspunkt
+        """, (token, navn, epost, uke, år, int(fravar), json.dumps(timer, ensure_ascii=False), total, tidspunkt))
+
+# ── Hjelpefunksjoner (uendret logikk) ────────────────────────────────────────
 
 FAKTA_KOLONNER = ["Navn", "Epost", "Uke", "År", "Dato innsending", "Investering", "Timer"]
 
 def skriv_fakta_puls(navn, epost, uke, år, tidspunkt, timer: dict):
-    """Legg til rader i fakta_puls.xlsx — én rad per investering."""
     if FAKTA_FIL.exists():
         wb = openpyxl.load_workbook(FAKTA_FIL)
         ws = wb.active
@@ -61,14 +167,12 @@ def skriv_fakta_puls(navn, epost, uke, år, tidspunkt, timer: dict):
         ws.append(FAKTA_KOLONNER)
 
     dato_str = tidspunkt[:10]
-    # Fjern eksisterende rader for samme person+uke+år
-    rader_å_beholde = [ws[1]]  # header
+    rader_å_beholde = [ws[1]]
     for row in ws.iter_rows(min_row=2, values_only=False):
         vals = [c.value for c in row]
         if not (vals[0] == navn and vals[2] == uke and vals[3] == år):
             rader_å_beholde.append(row)
 
-    # Skriv ny fil
     wb2 = openpyxl.Workbook()
     ws2 = wb2.active
     ws2.title = "Puls"
@@ -79,50 +183,33 @@ def skriv_fakta_puls(navn, epost, uke, år, tidspunkt, timer: dict):
         ws2.append([navn, epost, uke, år, dato_str, inv, t])
     wb2.save(FAKTA_FIL)
 
-# ── Hjelpefunksjoner ─────────────────────────────────────────────────────────
-
-def les_json(fil: Path, default):
-    if not fil.exists():
-        return default
-    try:
-        return json.loads(fil.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-def lagre_json(fil: Path, data):
-    fil.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
 def get_uke_år():
     iso = date.today().isocalendar()
     return iso[1], iso[0]
 
-def finn_bruker(token: str):
-    brukere = les_json(BRUKERE_FIL, {})
-    return brukere.get(token)
-
 def forrige_uke_svar(token: str, uke: int, år: int) -> dict:
-    svar = les_json(SVAR_FIL, [])
     fu, få = (52, år - 1) if uke == 1 else (uke - 1, år)
-    for s in reversed(svar):
-        if s["token"] == token and s["uke"] == fu and s["år"] == få:
-            return s["timer"]
-    return {}
+    with db() as con:
+        r = con.execute("SELECT timer FROM svar WHERE token=? AND uke=? AND år=?", (token, fu, få)).fetchone()
+    return json.loads(r["timer"]) if r else {}
 
 def har_svart(token: str, uke: int, år: int) -> bool:
-    svar = les_json(SVAR_FIL, [])
-    return any(s["token"] == token and s["uke"] == uke and s["år"] == år for s in svar)
+    with db() as con:
+        r = con.execute("SELECT 1 FROM svar WHERE token=? AND uke=? AND år=?", (token, uke, år)).fetchone()
+    return r is not None
 
 def historikk_bruker(token: str, år: int) -> list:
-    svar = les_json(SVAR_FIL, [])
-    return [s for s in svar if s["token"] == token and s["år"] == år]
+    with db() as con:
+        rader = con.execute("SELECT * FROM svar WHERE token=? AND år=? ORDER BY uke", (token, år)).fetchall()
+    return [_rad_til_svar(r) for r in rader]
 
 def siste_svar(token: str, uke: int, år: int) -> dict | None:
-    """Returner siste innsendte svar (ikke inneværende uke), eller None."""
-    svar = les_json(SVAR_FIL, [])
-    kandidater = [s for s in svar if s["token"] == token and not (s["uke"] == uke and s["år"] == år)]
-    if not kandidater:
-        return None
-    return max(kandidater, key=lambda s: (s["år"], s["uke"]))
+    with db() as con:
+        r = con.execute("""
+            SELECT * FROM svar WHERE token=? AND NOT (uke=? AND år=?)
+            ORDER BY år DESC, uke DESC LIMIT 1
+        """, (token, uke, år)).fetchone()
+    return _rad_til_svar(r) if r else None
 
 def fredag_kl_12(uke: int, år: int) -> datetime:
     jan4 = date(år, 1, 4)
@@ -138,20 +225,23 @@ def fmt_delta(minutter: float) -> str:
 
 def ranker_uke(uke: int, år: int) -> list:
     t0 = fredag_kl_12(uke, år)
-    alle = les_json(SVAR_FIL, [])
-    aktuelle = [s for s in alle if s["uke"] == uke and s["år"] == år and not s.get("fravær")]
+    with db() as con:
+        rader = con.execute(
+            "SELECT * FROM svar WHERE uke=? AND år=? AND fravar=0", (uke, år)
+        ).fetchall()
     resultat = []
-    for s in aktuelle:
+    for r in rader:
+        s = _rad_til_svar(r)
         delta = max(0, (datetime.fromisoformat(s["tidspunkt"]) - t0).total_seconds() / 60)
         resultat.append({"navn": s["navn"].split()[0], "delta_min": delta, "delta_fmt": fmt_delta(delta), "total": s.get("total", 0)})
     return sorted(resultat, key=lambda x: x["delta_min"])
 
 def måneds_ranking(måned: int, år: int) -> list:
-    alle = les_json(SVAR_FIL, [])
+    with db() as con:
+        rader = con.execute("SELECT * FROM svar WHERE år=? AND fravar=0", (år,)).fetchall()
     per_person: dict = {}
-    for s in alle:
-        if s.get("fravær") or s["år"] != år:
-            continue
+    for r in rader:
+        s = _rad_til_svar(r)
         if datetime.fromisoformat(s["tidspunkt"]).month != måned:
             continue
         t0 = fredag_kl_12(s["uke"], s["år"])
@@ -162,11 +252,11 @@ def måneds_ranking(måned: int, år: int) -> list:
     return sorted(resultat, key=lambda x: x["snitt_min"])[:5]
 
 def all_time_toppliste() -> list:
-    alle = les_json(SVAR_FIL, [])
-    uker = {(s["uke"], s["år"]) for s in alle}
+    with db() as con:
+        uker = con.execute("SELECT DISTINCT uke, år FROM svar").fetchall()
     poeng: dict = {}
-    for uke, år in uker:
-        for i, r in enumerate(ranker_uke(uke, år)):
+    for row in uker:
+        for i, r in enumerate(ranker_uke(row["uke"], row["år"])):
             p = poeng.setdefault(r["navn"], {"poeng": 0, "nr1": 0, "antall": 0})
             p["antall"] += 1
             p["nr1"] += (i == 0)
@@ -174,33 +264,37 @@ def all_time_toppliste() -> list:
     return sorted([{"navn": n, **v} for n, v in poeng.items()], key=lambda x: -x["poeng"])[:8]
 
 def hall_of_shame_liste(nå_uke: int, nå_år: int) -> list:
-    brukere = les_json(BRUKERE_FIL, {})
-    alle = les_json(SVAR_FIL, [])
+    brukere = hent_alle_brukere()
     resultat = []
     for token, b in brukere.items():
-        rapporterte = {(s["uke"], s["år"]) for s in alle if s["token"] == token}
+        with db() as con:
+            rapporterte = {(r["uke"], r["år"]) for r in con.execute(
+                "SELECT uke, år FROM svar WHERE token=?", (token,)
+            ).fetchall()}
         mangler_n = sum(1 for u in range(1, nå_uke) if (u, nå_år) not in rapporterte)
         if mangler_n > 0:
             resultat.append({"navn": b["navn"].split()[0], "mangler": mangler_n})
     return sorted(resultat, key=lambda x: -x["mangler"])[:5]
 
 def personlig_stats(token: str, nå_uke: int, nå_år: int) -> dict:
-    alle = les_json(SVAR_FIL, [])
-    mine = [s for s in alle if s["token"] == token and s["år"] == nå_år and not s.get("fravær")]
+    with db() as con:
+        rader = con.execute(
+            "SELECT * FROM svar WHERE token=? AND år=? AND fravar=0", (token, nå_år)
+        ).fetchall()
+    mine = [_rad_til_svar(r) for r in rader]
     if not mine:
         return {}
     total_timer = sum(s.get("total", 0) for s in mine)
     antall_uker = len(mine)
-    # Favorittinvestering
     inv_sum: dict = {}
     for s in mine:
         for inv, t in s.get("timer", {}).items():
             inv_sum[inv] = inv_sum.get(inv, 0) + t
     favoritt = max(inv_sum, key=lambda k: inv_sum[k]) if inv_sum else "–"
-    # Streak
     streak = 0
+    uker_svart = {s["uke"] for s in mine}
     for u in range(nå_uke - 1, 0, -1):
-        if any(s["uke"] == u for s in mine):
+        if u in uker_svart:
             streak += 1
         else:
             break
@@ -213,13 +307,11 @@ def personlig_stats(token: str, nå_uke: int, nå_år: int) -> dict:
     }
 
 def manglende_uker(token: str, nå_uke: int, nå_år: int) -> list:
-    """Returner liste av (uke, år) som ikke er rapportert, fra uke 1 til forrige uke."""
-    rapporterte = {(s["uke"], s["år"]) for s in les_json(SVAR_FIL, []) if s["token"] == token}
-    mangler = []
-    for u in range(1, nå_uke):
-        if (u, nå_år) not in rapporterte:
-            mangler.append((u, nå_år))
-    return mangler
+    with db() as con:
+        rapporterte = {(r["uke"], r["år"]) for r in con.execute(
+            "SELECT uke, år FROM svar WHERE token=?", (token,)
+        ).fetchall()}
+    return [(u, nå_år) for u in range(1, nå_uke) if (u, nå_år) not in rapporterte]
 
 # ── Ruter ────────────────────────────────────────────────────────────────────
 
@@ -231,7 +323,6 @@ async def vis_skjema(request: Request, token: str,
     if not bruker:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Ugyldig eller utløpt lenke.</h1>", status_code=404)
     nå_uke, nå_år = get_uke_år()
-    # Bruk query-param uke/år hvis oppgitt, ellers inneværende uke
     uke = uke if uke is not None else nå_uke
     år  = år  if år  is not None else nå_år
     allerede_svart = har_svart(token, uke, år)
@@ -253,7 +344,6 @@ async def send_inn(request: Request, token: str):
     if not bruker:
         return HTMLResponse("<h1>Ugyldig lenke</h1>", status_code=404)
     form = await request.form()
-    # Uke/år kommer fra skjulte felt i skjemaet (støtter historisk rapportering)
     nå_uke, nå_år = get_uke_år()
     try:
         uke = int(form.get("_uke", nå_uke))
@@ -270,37 +360,12 @@ async def send_inn(request: Request, token: str):
     fravar = form.get("_fravar") == "1"
 
     if fravar:
-        svar = les_json(SVAR_FIL, [])
-        svar = [s for s in svar if not (s["token"] == token and s["uke"] == uke and s["år"] == år)]
-        svar.append({
-            "token": token,
-            "navn": bruker["navn"],
-            "epost": bruker["epost"],
-            "uke": uke,
-            "år": år,
-            "fravær": True,
-            "timer": {},
-            "total": 0,
-            "tidspunkt": datetime.now().isoformat(),
-        })
-        lagre_json(SVAR_FIL, svar)
+        upsert_svar(token, bruker["navn"], bruker["epost"], uke, år, True, {}, 0, datetime.now().isoformat())
         return RedirectResponse(f"/puls/{token}/takk?fravar=1", status_code=303)
 
     if total > 40:
         total = 40
-    svar = les_json(SVAR_FIL, [])
-    svar = [s for s in svar if not (s["token"] == token and s["uke"] == uke and s["år"] == år)]
-    svar.append({
-        "token": token,
-        "navn": bruker["navn"],
-        "epost": bruker["epost"],
-        "uke": uke,
-        "år": år,
-        "timer": timer,
-        "total": total,
-        "tidspunkt": datetime.now().isoformat(),
-    })
-    lagre_json(SVAR_FIL, svar)
+    upsert_svar(token, bruker["navn"], bruker["epost"], uke, år, False, timer, total, datetime.now().isoformat())
     skriv_fakta_puls(bruker["navn"], bruker["epost"], uke, år, datetime.now().isoformat(), timer)
     return RedirectResponse(f"/puls/{token}/takk", status_code=303)
 
@@ -352,7 +417,7 @@ async def admin_get(request: Request):
         innlogget=innlogget,
         feil=False,
         melding=request.query_params.get("melding", ""),
-        brukere=les_json(BRUKERE_FIL, {}) if innlogget else {},
+        brukere=hent_alle_brukere() if innlogget else {},
         investeringer=les_investeringer() if innlogget else [],
     )
 
@@ -381,9 +446,7 @@ async def admin_legg_til_bruker(request: Request):
     navn  = form.get("navn", "").strip()
     epost = form.get("epost", "").strip()
     if token and navn and epost:
-        brukere = les_json(BRUKERE_FIL, {})
-        brukere[token] = {"navn": navn, "epost": epost}
-        lagre_json(BRUKERE_FIL, brukere)
+        lagre_bruker(token, navn, epost)
     return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
 
 @app.post("/admin/brukere/fjern")
@@ -392,9 +455,7 @@ async def admin_fjern_bruker(request: Request):
         return RedirectResponse("/admin", status_code=303)
     form = await request.form()
     token = form.get("token", "").strip()
-    brukere = les_json(BRUKERE_FIL, {})
-    navn = brukere.pop(token, {}).get("navn", token)
-    lagre_json(BRUKERE_FIL, brukere)
+    navn = fjern_bruker(token)
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
 
 @app.post("/admin/investeringer/legg-til")
@@ -407,7 +468,7 @@ async def admin_legg_til_inv(request: Request):
         inv = les_investeringer()
         if navn not in inv:
             inv.append(navn)
-            lagre_json(INV_FIL, inv)
+            lagre_investeringer(inv)
     return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
 
 @app.post("/admin/investeringer/fjern")
@@ -416,8 +477,7 @@ async def admin_fjern_inv(request: Request):
         return RedirectResponse("/admin", status_code=303)
     form = await request.form()
     navn = form.get("navn", "").strip()
-    inv = [i for i in les_investeringer() if i != navn]
-    lagre_json(INV_FIL, inv)
+    lagre_investeringer([i for i in les_investeringer() if i != navn])
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
 
 
