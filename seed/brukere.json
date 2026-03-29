@@ -1,0 +1,26 @@
+{
+  "torstein": {
+    "navn": "Torstein",
+    "epost": "tze@kverva.no"
+  },
+  "per": {
+    "navn": "Per Hansen",
+    "epost": "per@kverva.no"
+  },
+  "kari": {
+    "navn": "Kari Nilsen",
+    "epost": "kari@kverva.no"
+  },
+  "ole": {
+    "navn": "Ole Berg",
+    "epost": "ole@kverva.no"
+  },
+  "anne": {
+    "navn": "Anne Larsen",
+    "epost": "anne@kverva.no"
+  },
+  "lars": {
+    "navn": "Lars Dahl",
+    "epost": "lars@kverva.no"
+  }
+}
