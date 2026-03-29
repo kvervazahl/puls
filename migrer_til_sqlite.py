@@ -26,6 +26,32 @@ def migrer():
     con = sqlite3.connect(DB_FIL)
     con.row_factory = sqlite3.Row
 
+    # Opprett tabeller hvis de ikke finnes
+    con.executescript("""
+        CREATE TABLE IF NOT EXISTS brukere (
+            token TEXT PRIMARY KEY,
+            navn  TEXT NOT NULL,
+            epost TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS investeringer (
+            navn      TEXT PRIMARY KEY,
+            rekkefølge INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS svar (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            token     TEXT NOT NULL,
+            navn      TEXT NOT NULL,
+            epost     TEXT NOT NULL,
+            uke       INTEGER NOT NULL,
+            år        INTEGER NOT NULL,
+            fravar    INTEGER NOT NULL DEFAULT 0,
+            timer     TEXT NOT NULL DEFAULT '{}',
+            total     REAL NOT NULL DEFAULT 0,
+            tidspunkt TEXT NOT NULL,
+            UNIQUE(token, uke, år)
+        );
+    """)
+
     # Brukere
     brukere = les_json(BRUKERE_FIL, {})
     if brukere:
