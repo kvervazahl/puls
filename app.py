@@ -361,23 +361,27 @@ async def send_inn(request: Request, token: str):
 
     if fravar:
         upsert_svar(token, bruker["navn"], bruker["epost"], uke, år, True, {}, 0, datetime.now().isoformat())
-        return RedirectResponse(f"/puls/{token}/takk?fravar=1", status_code=303)
+        return RedirectResponse(f"/puls/{token}/takk?uke={uke}&år={år}&fravar=1", status_code=303)
 
     if total > 40:
         total = 40
     upsert_svar(token, bruker["navn"], bruker["epost"], uke, år, False, timer, total, datetime.now().isoformat())
-    skriv_fakta_puls(bruker["navn"], bruker["epost"], uke, år, datetime.now().isoformat(), timer)
-    return RedirectResponse(f"/puls/{token}/takk", status_code=303)
+    return RedirectResponse(f"/puls/{token}/takk?uke={uke}&år={år}", status_code=303)
 
 @app.get("/puls/{token}/takk", response_class=HTMLResponse)
-async def takk(request: Request, token: str, fravar: Optional[int] = Query(None)):
+async def takk(request: Request, token: str,
+               uke: Optional[int] = Query(None),
+               år: Optional[int] = Query(None),
+               fravar: Optional[int] = Query(None)):
     bruker = finn_bruker(token)
     if not bruker:
         return HTMLResponse("<h1>Ugyldig lenke</h1>", status_code=404)
-    uke, år = get_uke_år()
+    nå_uke, nå_år = get_uke_år()
+    uke = uke if uke is not None else nå_uke
+    år  = år  if år  is not None else nå_år
     hist = historikk_bruker(token, år)
     siste = next((s for s in reversed(hist) if s["uke"] == uke), None)
-    mangler = manglende_uker(token, uke, år)
+    mangler = manglende_uker(token, nå_uke, nå_år)
     return render("takk.html",
         bruker=bruker, token=token, uke=uke, år=år,
         historikk=hist, siste=siste, mangler=mangler,

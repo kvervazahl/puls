@@ -61,7 +61,7 @@
   <div class="takk-box">
     <div class="takk-icon">✅</div>
     <h2>Vellykket! Takk, {{ bruker.navn }}!</h2>
-    <p>Uke {{ uke }} er registrert og lagret i <strong>fakta_puls.xlsx</strong>.</p>
+    <p>Uke {{ uke }}, {{ år }} er registrert.</p>
   </div>
   {% endif %}
 
@@ -116,6 +116,12 @@
     </div>
   </div>
   {% endif %}
+
+  <div style="text-align:center; margin-top:20px; margin-bottom:8px;">
+    <a href="/puls/{{ token }}" style="display:inline-block; background:var(--blue); color:#fff; text-decoration:none; border-radius:8px; padding:10px 24px; font-size:.9rem; font-weight:600;">
+      Gå til inneværende uke
+    </a>
+  </div>
 
   <div class="footer">Kverva AS · Puls timerapportering</div>
 </div>
