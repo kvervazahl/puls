@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Puls — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --blue:   #1e3a5f;
+      --accent: #4f8ef7;
+      --green:  #16a34a;
+      --red:    #dc2626;
+      --bg:     #f1f5f9;
+      --card:   #ffffff;
+      --border: #e2e8f0;
+      --text:   #1e293b;
+      --muted:  #64748b;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 48px; }
+    header { background: var(--blue); color: #fff; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .hdr-logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; }
+    .hdr-logo span { color: #93c5fd; }
+    .hdr-sub { font-size: .78rem; color: #93c5fd; margin-top: 2px; }
+    .logout { color: #93c5fd; font-size: .82rem; text-decoration: none; }
+    .logout:hover { color: #fff; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px; display: flex; flex-direction: column; gap: 24px; }
+    .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
+    .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--blue); }
+    .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .list-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-radius: 8px; padding: 10px 14px; font-size: .9rem; }
+    .list-item .meta { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+    .list-item-left { display: flex; flex-direction: column; }
+    .btn-fjern { background: none; border: 1px solid #fca5a5; color: var(--red); border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; }
+    .btn-fjern:hover { background: #fee2e2; }
+    .add-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    .add-form input { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem; font-family: inherit; }
+    .add-form input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .btn-add { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: .9rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .btn-add:hover { background: #3b7de8; }
+    .token-box { font-family: monospace; font-size: .82rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--muted); }
+    .flash { padding: 12px 16px; border-radius: 8px; font-size: .9rem; font-weight: 500; }
+    .flash.ok { background: #dcfce7; color: #166534; }
+    .flash.err { background: #fee2e2; color: #991b1b; }
+
+    /* Login */
+    .login-wrap { max-width: 360px; margin: 80px auto; padding: 0 16px; }
+    .login-card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 32px; }
+    .login-card h1 { font-size: 1.2rem; font-weight: 700; color: var(--blue); margin-bottom: 4px; }
+    .login-card p { color: var(--muted); font-size: .85rem; margin-bottom: 24px; }
+    .login-card input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: .95rem; font-family: inherit; margin-bottom: 12px; }
+    .login-card input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .login-card button { width: 100%; background: var(--blue); color: #fff; border: none; border-radius: 8px; padding: 11px; font-size: .95rem; font-weight: 600; cursor: pointer; }
+    .login-card button:hover { background: #162d4a; }
+    .login-err { color: var(--red); font-size: .85rem; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+{% if not innlogget %}
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>Puls Admin</h1>
+    <p>Logg inn for å administrere brukere og investeringer.</p>
+    {% if feil %}<div class="login-err">Feil passord, prøv igjen.</div>{% endif %}
+    <form method="post" action="/admin/login">
+      <input type="password" name="passord" placeholder="Passord" autofocus/>
+      <button type="submit">Logg inn</button>
+    </form>
+  </div>
+</div>
+
+{% else %}
+<header>
+  <div>
+    <div class="hdr-logo">Kverva <span>Puls</span></div>
+    <div class="hdr-sub">Admin</div>
+  </div>
+  <a href="/admin/logout" class="logout">Logg ut</a>
+</header>
+
+<div class="wrap">
+
+  {% if melding %}
+  <div class="flash ok">{{ melding }}</div>
+  {% endif %}
+
+  <!-- BRUKERE -->
+  <div class="card">
+    <h2>Brukere</h2>
+    <div class="list">
+      {% for token, b in brukere.items() %}
+      <div class="list-item">
+        <div class="list-item-left">
+          <strong>{{ b.navn }}</strong>
+          <div class="meta">{{ b.epost }} &nbsp;·&nbsp; <span class="token-box">{{ token }}</span></div>
+          <div class="meta">Link: /puls/{{ token }}</div>
+        </div>
+        <form method="post" action="/admin/brukere/fjern" style="margin:0">
+          <input type="hidden" name="token" value="{{ token }}"/>
+          <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ b.navn }}?')">Fjern</button>
+        </form>
+      </div>
+      {% else %}
+      <div style="color:var(--muted);font-size:.9rem">Ingen brukere ennå.</div>
+      {% endfor %}
+    </div>
+    <form method="post" action="/admin/brukere/legg-til" class="add-form">
+      <input type="text" name="token" placeholder="token (f.eks. ola)" required/>
+      <input type="text" name="navn" placeholder="Fullt navn" required/>
+      <input type="email" name="epost" placeholder="Epost" required/>
+      <button class="btn-add" type="submit">Legg til</button>
+    </form>
+  </div>
+
+  <!-- INVESTERINGER -->
+  <div class="card">
+    <h2>Investeringer</h2>
+    <div class="list">
+      {% for inv in investeringer %}
+      <div class="list-item">
+        <span>{{ inv }}</span>
+        <form method="post" action="/admin/investeringer/fjern" style="margin:0">
+          <input type="hidden" name="navn" value="{{ inv }}"/>
+          <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ inv }}?')">Fjern</button>
+        </form>
+      </div>
+      {% else %}
+      <div style="color:var(--muted);font-size:.9rem">Ingen investeringer ennå.</div>
+      {% endfor %}
+    </div>
+    <form method="post" action="/admin/investeringer/legg-til" class="add-form">
+      <input type="text" name="navn" placeholder="Navn på investering" required/>
+      <button class="btn-add" type="submit">Legg til</button>
+    </form>
+  </div>
+
+</div>
+{% endif %}
+</body>
+</html>

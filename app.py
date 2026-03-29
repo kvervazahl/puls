@@ -3,9 +3,9 @@ Puls — Ukentlig timerapportering
 Start: uvicorn puls.app:app --reload --port 8502
 Eller: python puls/app.py
 """
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, Cookie
 from typing import Optional
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from pathlib import Path
@@ -14,9 +14,11 @@ from datetime import datetime, date, timedelta
 import uvicorn
 import openpyxl
 import os
+import secrets
 
 app = FastAPI(title="Puls")
 BASE = Path(__file__).parent
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "puls-admin")
 
 # Jinja2 direkte (omgår Starlette-wrapper som har bug i Python 3.14)
 jinja_env = Environment(
@@ -334,6 +336,90 @@ async def stats(request: Request, token: str):
         mine=personlig_stats(token, nå_uke, nå_år),
         historikk=historikk_bruker(token, nå_år),
     )
+
+# ── Admin ────────────────────────────────────────────────────────────────────
+
+ADMIN_COOKIE = "puls_admin"
+
+def er_innlogget(request: Request) -> bool:
+    token = request.cookies.get(ADMIN_COOKIE, "")
+    return secrets.compare_digest(token, ADMIN_PASSWORD)
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_get(request: Request):
+    innlogget = er_innlogget(request)
+    return render("admin.html",
+        innlogget=innlogget,
+        feil=False,
+        melding=request.query_params.get("melding", ""),
+        brukere=les_json(BRUKERE_FIL, {}) if innlogget else {},
+        investeringer=les_investeringer() if innlogget else [],
+    )
+
+@app.post("/admin/login")
+async def admin_login(request: Request):
+    form = await request.form()
+    passord = form.get("passord", "")
+    if secrets.compare_digest(passord, ADMIN_PASSWORD):
+        response = RedirectResponse("/admin", status_code=303)
+        response.set_cookie(ADMIN_COOKIE, ADMIN_PASSWORD, httponly=True, samesite="lax")
+        return response
+    return render("admin.html", innlogget=False, feil=True, melding="", brukere={}, investeringer=[])
+
+@app.get("/admin/logout")
+async def admin_logout():
+    response = RedirectResponse("/admin", status_code=303)
+    response.delete_cookie(ADMIN_COOKIE)
+    return response
+
+@app.post("/admin/brukere/legg-til")
+async def admin_legg_til_bruker(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    token = form.get("token", "").strip().lower()
+    navn  = form.get("navn", "").strip()
+    epost = form.get("epost", "").strip()
+    if token and navn and epost:
+        brukere = les_json(BRUKERE_FIL, {})
+        brukere[token] = {"navn": navn, "epost": epost}
+        lagre_json(BRUKERE_FIL, brukere)
+    return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
+
+@app.post("/admin/brukere/fjern")
+async def admin_fjern_bruker(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    token = form.get("token", "").strip()
+    brukere = les_json(BRUKERE_FIL, {})
+    navn = brukere.pop(token, {}).get("navn", token)
+    lagre_json(BRUKERE_FIL, brukere)
+    return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
+
+@app.post("/admin/investeringer/legg-til")
+async def admin_legg_til_inv(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    navn = form.get("navn", "").strip()
+    if navn:
+        inv = les_investeringer()
+        if navn not in inv:
+            inv.append(navn)
+            lagre_json(INV_FIL, inv)
+    return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
+
+@app.post("/admin/investeringer/fjern")
+async def admin_fjern_inv(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    navn = form.get("navn", "").strip()
+    inv = [i for i in les_investeringer() if i != navn]
+    lagre_json(INV_FIL, inv)
+    return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
+
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8502, reload=True, app_dir=str(BASE))
