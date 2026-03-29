@@ -485,5 +485,27 @@ async def admin_fjern_inv(request: Request):
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
 
 
+@app.get("/admin/eksport.csv")
+async def eksport_csv(request: Request):
+    if not er_innlogget(request):
+        return HTMLResponse("Ikke innlogget", status_code=401)
+    with db() as con:
+        rader = con.execute("SELECT * FROM svar ORDER BY år, uke, navn").fetchall()
+    linjer = ["Navn,Epost,Uke,År,Investering,Timer,Tidspunkt"]
+    for r in rader:
+        if r["fravar"]:
+            linjer.append(f'{r["navn"]},{r["epost"]},{r["uke"]},{r["år"]},Fravær,0,{r["tidspunkt"]}')
+        else:
+            timer = json.loads(r["timer"])
+            for inv, t in timer.items():
+                linjer.append(f'{r["navn"]},{r["epost"]},{r["uke"]},{r["år"]},{inv},{t},{r["tidspunkt"]}')
+    csv_data = "\n".join(linjer)
+    return Response(
+        content=csv_data.encode("utf-8-sig"),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=puls_eksport.csv"},
+    )
+
+
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8502, reload=True, app_dir=str(BASE))
