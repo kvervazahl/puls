@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kverva Puls — Takk!</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --blue:#1e3a5f; --accent:#4f8ef7; --green:#16a34a; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
+    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .hdr-logo { font-size:1.1rem; font-weight:700; letter-spacing:.04em; }
+    .hdr-logo span { color:#93c5fd; }
+    .hdr-sub { font-size:.78rem; color:#93c5fd; margin-top:2px; }
+    .hdr-badge { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:99px; padding:6px 16px; font-size:.85rem; font-weight:600; }
+    .wrap { max-width:560px; margin:0 auto; padding:28px 16px; }
+    .takk-box { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius); padding:28px 24px; text-align:center; margin-bottom:20px; }
+    .takk-icon { font-size:2.5rem; margin-bottom:12px; }
+    .takk-box h2 { color:var(--green); font-size:1.3rem; margin-bottom:6px; }
+    .takk-box p { font-size:.875rem; color:var(--muted); }
+    .siste-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; margin-bottom:16px; }
+    .siste-title { font-size:.8rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:14px; }
+    .siste-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); font-size:.875rem; }
+    .siste-row:last-child { border-bottom:none; }
+    .siste-timer { font-weight:600; color:var(--blue); }
+    .chart-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 24px; }
+    .chart-title { font-size:.85rem; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; }
+    .chart-sub { font-size:.75rem; color:var(--muted); margin-bottom:16px; }
+    .chart-wrap { max-width:260px; margin:0 auto; }
+    .stats-row { display:flex; gap:12px; margin-bottom:16px; }
+    .stat-box { flex:1; background:var(--bg); border-radius:10px; padding:14px; text-align:center; }
+    .stat-num { font-size:1.5rem; font-weight:700; color:var(--blue); }
+    .stat-lbl { font-size:.72rem; color:var(--muted); margin-top:2px; }
+    .mangler-box { background:#fffbeb; border:1px solid #fcd34d; border-radius:var(--radius); padding:16px 20px; margin-bottom:16px; }
+    .mangler-box strong { color:#92400e; display:block; margin-bottom:8px; font-size:.9rem; }
+    .mangler-links { display:flex; flex-wrap:wrap; gap:8px; }
+    .mangler-link { background:#fff; border:1px solid #fcd34d; border-radius:6px; padding:5px 14px; color:#92400e; font-weight:600; text-decoration:none; font-size:.82rem; }
+    .mangler-link:hover { background:#fef3c7; }
+    .footer { text-align:center; margin-top:28px; font-size:.75rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="hdr-logo">KVERVA <span>○</span> PULS</div>
+    <div class="hdr-sub">Ukentlig timerapportering</div>
+  </div>
+  <div class="hdr-badge">Uke {{ uke }}, {{ år }}</div>
+</header>
+
+<div class="wrap">
+  {% if fravar %}
+  <div class="takk-box" style="background:#fff7ed;border-color:#fed7aa">
+    <div class="takk-icon">🏖️</div>
+    <h2 style="color:#c2410c">Notert — god hvile!</h2>
+    <p>Uke {{ uke }} er markert som ferie/syk. Du slipper purring denne uken.</p>
+  </div>
+  {% else %}
+  <div class="takk-box">
+    <div class="takk-icon">✅</div>
+    <h2>Vellykket! Takk, {{ bruker.navn }}!</h2>
+    <p>Uke {{ uke }} er registrert og lagret i <strong>fakta_puls.xlsx</strong>.</p>
+  </div>
+  {% endif %}
+
+  {% if siste %}
+  <div class="siste-card">
+    <div class="siste-title">Uke {{ uke }} — ditt svar</div>
+    {% for inv, t in siste.timer.items() %}{% if t > 0 %}
+    <div class="siste-row">
+      <span>{{ inv }}</span>
+      <span class="siste-timer">{{ t }} t</span>
+    </div>
+    {% endif %}{% endfor %}
+    <div class="siste-row" style="font-weight:600">
+      <span>Totalt</span>
+      <span class="siste-timer">{{ siste.total }} timer</span>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if mangler %}
+  <div class="mangler-box">
+    <strong>⚠️ Du mangler rapportering for disse ukene:</strong>
+    <div class="mangler-links">
+      {% for u, å in mangler %}
+      <a class="mangler-link" href="/puls/{{ token }}?uke={{ u }}&år={{ å }}">Uke {{ u }}, {{ å }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if historikk %}
+  <div class="chart-card">
+    <div class="chart-title">📊 Din fordeling — {{ år }}</div>
+    <div class="chart-sub">Basert på {{ historikk | length }} rapporterte uker</div>
+    {% set total_timer = historikk | sum(attribute='total') %}
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num">{{ historikk | length }}</div>
+        <div class="stat-lbl">Uker rapportert</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">{{ total_timer }}</div>
+        <div class="stat-lbl">Timer totalt</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">{{ (total_timer / (historikk | length)) | round(0) | int }}</div>
+        <div class="stat-lbl">Snitt per uke</div>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="puls-chart"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="footer">Kverva AS · Puls timerapportering</div>
+</div>
+
+<script>
+{% if historikk %}
+const hist = {{ historikk | tojson }};
+const COLORS = ['#1e3a5f','#4f8ef7','#16a34a','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
+const totals = {};
+hist.forEach(s => {
+  Object.entries(s.timer).forEach(([k,v]) => { totals[k] = (totals[k]||0) + v; });
+});
+const labels = Object.keys(totals).filter(k => totals[k] > 0);
+const data   = labels.map(k => totals[k]);
+if (labels.length > 0) {
+  new Chart(document.getElementById('puls-chart'), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: COLORS.slice(0,labels.length), borderWidth:2, borderColor:'#fff' }] },
+    options: {
+      plugins: {
+        legend: { position:'bottom', labels:{ font:{size:11}, padding:12, boxWidth:12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw} timer` } }
+      },
+      cutout: '60%',
+    }
+  });
+}
+{% endif %}
+</script>
+</body>
+</html>

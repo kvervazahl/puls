@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kverva Puls — Stats</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --blue:   #1e3a5f;
+      --accent: #4f8ef7;
+      --green:  #16a34a;
+      --red:    #dc2626;
+      --amber:  #d97706;
+      --bg:     #f1f5f9;
+      --card:   #ffffff;
+      --border: #e2e8f0;
+      --text:   #1e293b;
+      --muted:  #64748b;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 48px; }
+
+    header { background: var(--blue); color: #fff; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .hdr-logo { font-size: 1.1rem; font-weight: 700; letter-spacing: .04em; }
+    .hdr-logo span { color: #93c5fd; }
+    .hdr-sub { font-size: .78rem; color: #93c5fd; margin-top: 2px; }
+    .hdr-badge { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); border-radius: 99px; padding: 6px 16px; font-size: .85rem; font-weight: 600; }
+
+    .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px; }
+
+    /* ── TABS ── */
+    .tab-nav { display: flex; background: var(--border); border-radius: 10px; padding: 4px; margin-bottom: 20px; gap: 4px; }
+    .tab-btn { flex: 1; text-align: center; padding: 9px 8px; border-radius: 7px; font-size: .875rem; font-weight: 600; text-decoration: none; color: var(--muted); transition: all .15s; }
+    .tab-btn.active { background: var(--card); color: var(--blue); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+
+    /* ── CARDS ── */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 24px; margin-bottom: 16px; }
+    .card-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 14px; }
+
+    /* ── PERSONAL STATS ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .stat-box { background: var(--bg); border-radius: 10px; padding: 12px; text-align: center; }
+    .stat-num { font-size: 1.5rem; font-weight: 700; color: var(--blue); line-height: 1.1; }
+    .stat-lbl { font-size: .7rem; color: var(--muted); margin-top: 3px; }
+    .fact-row { font-size: .82rem; color: var(--muted); display: flex; justify-content: space-between; padding: 5px 0; border-top: 1px solid var(--border); }
+    .fact-row strong { color: var(--text); }
+
+    /* ── CHART ── */
+    .chart-row { display: flex; align-items: center; gap: 20px; }
+    .chart-wrap { flex-shrink: 0; width: 100px; height: 100px; }
+    .legend { flex: 1; display: flex; flex-direction: column; gap: 4px; font-size: .75rem; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+    /* ── RANKING ── */
+    .rank-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .rank-row:last-child { border-bottom: none; }
+    .rank-pos { font-size: 1.2rem; min-width: 32px; text-align: center; }
+    .rank-name { font-weight: 600; font-size: .9rem; flex: 1; }
+    .rank-time { font-size: .82rem; color: var(--muted); }
+    .rank-badge { font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
+    .badge-gold   { background: #fef3c7; color: #92400e; }
+    .badge-silver { background: #f1f5f9; color: #475569; }
+    .badge-bronze { background: #fff7ed; color: #9a3412; }
+
+    /* ── SHAME ── */
+    .shame-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: .875rem; }
+    .shame-row:last-child { border-bottom: none; }
+    .shame-name { flex: 1; font-weight: 500; }
+    .shame-count { font-weight: 700; color: var(--red); }
+
+    /* ── EMPTY STATE ── */
+    .empty { text-align: center; padding: 24px; color: var(--muted); font-size: .875rem; }
+
+    @media (max-width: 420px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      header { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="hdr-logo">KVERVA <span>○</span> PULS</div>
+    <div class="hdr-sub">Ukentlig timerapportering</div>
+  </div>
+  <div class="hdr-badge">Uke {{ uke }}, {{ år }}</div>
+</header>
+
+<div class="wrap">
+
+  <div class="tab-nav">
+    <a class="tab-btn" href="/puls/{{ token }}">📋 Rapportering</a>
+    <a class="tab-btn active" href="/puls/{{ token }}/stats">🏆 Puls Stats</a>
+  </div>
+
+  <!-- ── MINE TALL ── -->
+  {% if mine %}
+  <div class="card">
+    <div class="card-title">👤 Mine tall — {{ år }}</div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-num">{{ mine.antall_uker }}</div>
+        <div class="stat-lbl">Uker rapportert</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">{{ mine.total_timer }}</div>
+        <div class="stat-lbl">Timer totalt</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">{{ mine.snitt }}</div>
+        <div class="stat-lbl">Snitt per uke</div>
+      </div>
+    </div>
+    {% if historikk %}
+    <div class="chart-row" style="margin-bottom:12px">
+      <div class="chart-wrap">
+        <canvas id="mine-chart"></canvas>
+      </div>
+      <div class="legend" id="mine-legend"></div>
+    </div>
+    {% endif %}
+    <div class="fact-row"><span>Favorittinvestering</span><strong>{{ mine.favoritt }}</strong></div>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-title">👤 Mine tall — {{ år }}</div>
+    <div class="empty">Ingen rapporteringer enda i {{ år }}.</div>
+  </div>
+  {% endif %}
+
+  <!-- ── MÅNEDEN ── -->
+  <div class="card">
+    <div class="card-title">📅 {{ nå_måned_navn }} — raskest i snitt</div>
+    {% if måneds %}
+    {% for r in måneds %}
+    <div class="rank-row">
+      <div class="rank-pos">
+        {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}{{ loop.index }}.{% endif %}
+      </div>
+      <div class="rank-name">{{ r.navn }}</div>
+      <div class="rank-time">{{ r.snitt_fmt }} snitt · {{ r.antall }} uker</div>
+      {% if loop.index == 1 %}<span class="rank-badge badge-gold">Månedens beste</span>{% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">Ingen data for denne måneden enda.</div>
+    {% endif %}
+  </div>
+
+  <!-- ── HALL OF SHAME ── -->
+  <div class="card">
+    <div class="card-title">🏚️ Hall of Shame — flest manglende uker</div>
+    {% if shame %}
+    {% for r in shame %}
+    <div class="shame-row">
+      <div class="rank-pos">{{ loop.index }}.</div>
+      <div class="shame-name">{{ r.navn }}</div>
+      <div class="shame-count">{{ r.mangler }} uke{{ "r" if r.mangler != 1 else "" }} mangler</div>
+      {% if loop.index == 1 %}<span class="rank-badge" style="background:#fee2e2;color:#991b1b">💤 Sovende</span>{% endif %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">🎉 Alle har rapportert alle uker!</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+{% if historikk %}
+const hist = {{ historikk | tojson }};
+const COLORS = ['#1e3a5f','#4f8ef7','#16a34a','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
+const invListe = {{ historikk[0].timer.keys() | list | tojson }};
+const totals = {};
+invListe.forEach(n => totals[n] = 0);
+hist.forEach(s => { invListe.forEach(n => { totals[n] += (s.timer[n] || 0); }); });
+const labels = invListe.filter(n => totals[n] > 0);
+const data = labels.map(n => totals[n]);
+const totalTimer = data.reduce((a,b) => a+b, 0);
+
+new Chart(document.getElementById('mine-chart'), {
+  type: 'doughnut',
+  data: { labels, datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length), borderWidth: 2, borderColor: '#fff' }] },
+  options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}t` } } }, cutout: '65%' }
+});
+
+const leg = document.getElementById('mine-legend');
+labels.forEach((l, i) => {
+  const pct = Math.round(data[i] / totalTimer * 100);
+  leg.innerHTML += `<div class="legend-item"><div class="legend-dot" style="background:${COLORS[i]}"></div><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${l}</span><span style="color:var(--muted);flex-shrink:0;margin-left:4px">${pct}%</span></div>`;
+});
+{% endif %}
+</script>
+</body>
+</html>
