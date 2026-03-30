@@ -538,6 +538,15 @@ async def admin_endre_kategori(request: Request):
     return RedirectResponse(f"/admin?melding={navn}+oppdatert", status_code=303)
 
 
+@app.get("/api/brukere")
+async def api_brukere(request: Request, key: Optional[str] = Query(default=None)):
+    api_key_ok = EXPORT_API_KEY and key and secrets.compare_digest(key, EXPORT_API_KEY)
+    if not api_key_ok:
+        return JSONResponse({"error": "Ikke autorisert"}, status_code=403)
+    with db() as con:
+        rader = con.execute("SELECT navn, epost FROM brukere ORDER BY navn").fetchall()
+    return JSONResponse([{"navn": r["navn"], "epost": r["epost"]} for r in rader])
+
 @app.get("/admin/eksport.csv")
 async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)):
     api_key_ok = EXPORT_API_KEY and key and secrets.compare_digest(key, EXPORT_API_KEY)
