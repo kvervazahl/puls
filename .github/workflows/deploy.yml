@@ -11,12 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy til Azure Web App
-        uses: azure/webapps-deploy@v2
+      - name: Login til Azure
+        uses: azure/login@v2
         with:
-          app-name: 'puls-kverva'
-          slot-name: 'Production'
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE }}
-          package: '.'
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Trigger deploy fra GitHub
+        run: |
+          az webapp deployment source sync \
+            --name puls-kverva \
+            --resource-group rg-puls
