@@ -5,7 +5,7 @@ Eller: python puls/app.py
 """
 from fastapi import FastAPI, Request, Query, Cookie
 from typing import Optional
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup
 from pathlib import Path
@@ -513,6 +513,14 @@ async def admin_fjern_inv(request: Request):
     navn = form.get("navn", "").strip()
     lagre_investeringer([i for i in les_investeringer() if i["navn"] != navn])
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
+
+@app.post("/admin/investeringer/reorder")
+async def admin_reorder_inv(request: Request):
+    if not er_innlogget(request):
+        return JSONResponse({"ok": False}, status_code=401)
+    data = await request.json()
+    lagre_investeringer(data)
+    return JSONResponse({"ok": True})
 
 @app.post("/admin/investeringer/endre-kategori")
 async def admin_endre_kategori(request: Request):

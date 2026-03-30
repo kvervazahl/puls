@@ -77,6 +77,10 @@
     .kat-select { font-size: .78rem; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; background: #fff; color: var(--text); cursor: pointer; }
     .kat-select:focus { outline: 2px solid var(--accent); }
     .btn-kat-save { background: var(--green); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: .78rem; font-weight: 600; cursor: pointer; }
+    .drag-handle { cursor: grab; color: #bbb; font-size: 1rem; padding-right: 6px; user-select: none; }
+    .drag-handle:active { cursor: grabbing; }
+    .list-item.dragging { opacity: 0.4; background: #f0f9ff; }
+    .list-item.drag-over { border-top: 2px solid var(--accent); }
     .btn-kat-save:hover { opacity: .85; }
 
     /* Login */
@@ -159,10 +163,11 @@
       {% if kat_inv %}
       <div class="kat-gruppe">
         <div class="kat-header">{{ loop.index }}. {{ kat }}</div>
-        <div class="list">
+        <div class="list drag-list">
           {% for item in kat_inv %}
-          <div class="list-item">
+          <div class="list-item" draggable="true" data-navn="{{ item.navn }}" data-kategori="{{ item.kategori }}">
             <div class="list-item-left">
+              <span class="drag-handle">⠿</span>
               <span>{{ item.navn }}</span>
             </div>
             <div class="list-item-actions">
@@ -206,5 +211,47 @@
 
 </div>
 {% endif %}
+
+<script>
+  let dragging = null;
+
+  document.querySelectorAll('.list-item[draggable]').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      dragging = item;
+      setTimeout(() => item.classList.add('dragging'), 0);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      document.querySelectorAll('.list-item').forEach(i => i.classList.remove('drag-over'));
+      lagreRekkefølge();
+      dragging = null;
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (!dragging || dragging === item) return;
+      document.querySelectorAll('.list-item').forEach(i => i.classList.remove('drag-over'));
+      const rect = item.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        item.parentNode.insertBefore(dragging, item);
+      } else {
+        item.parentNode.insertBefore(dragging, item.nextSibling);
+      }
+    });
+  });
+
+  function lagreRekkefølge() {
+    const liste = [];
+    document.querySelectorAll('.list-item[data-navn]').forEach(item => {
+      liste.push({ navn: item.dataset.navn, kategori: item.dataset.kategori });
+    });
+    fetch('/admin/investeringer/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(liste)
+    });
+  }
+</script>
 </body>
 </html>
