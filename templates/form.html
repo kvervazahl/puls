@@ -109,12 +109,42 @@
     .total-bar-fill.over { background: var(--red); }
     .total-hint { font-size: .75rem; color: var(--muted); }
 
+    /* ── KATEGORI-SEKSJON ── */
+    .kat-seksjon {
+      margin-bottom: 16px;
+    }
+    .kat-tittel {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      padding: 0 4px 8px 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .kat-tittel::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .kat-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .kat-dot.Laks          { background: #10b981; }
+    .kat-dot.Sjømat        { background: #3b82f6; }
+    .kat-dot.Investeringer { background: #8b5cf6; }
+    .kat-dot.Kapital       { background: #f59e0b; }
+    .kat-dot.Annet         { background: #94a3b8; }
+
     /* ── SLIDERS ── */
     .sliders-card {
       background: var(--card);
       border-radius: var(--radius);
       border: 1px solid var(--border);
-      margin-bottom: 16px;
+      margin-bottom: 4px;
       overflow: hidden;
     }
     .slider-row {
@@ -337,24 +367,38 @@
     <form method="POST" action="/puls/{{ token }}" id="puls-form">
       <input type="hidden" name="_uke" value="{{ uke }}">
       <input type="hidden" name="_år" value="{{ år }}">
-      <div class="sliders-card">
-        {% for inv in investeringer %}
-        {% set key = inv.replace(' ','_').replace('/','_') %}
-        {% set prev = forrige.get(inv, 0) %}
-        <div class="slider-row">
-          <div class="slider-header">
-            <span class="slider-name">{{ inv }}</span>
-            <span class="slider-val" id="val-{{ loop.index }}">{{ prev }} <span>timer</span></span>
+
+      {% set kategorier = ["Laks", "Sjømat", "Investeringer", "Kapital", "Annet"] %}
+      {% set ns = namespace(idx=0) %}
+      {% for kat in kategorier %}
+        {% set kat_inv = investeringer | selectattr("kategori", "equalto", kat) | list %}
+        {% if kat_inv %}
+        <div class="kat-seksjon">
+          <div class="kat-tittel">
+            <span class="kat-dot {{ kat }}"></span>{{ kat }}
           </div>
-          {% if prev > 0 %}
-          <div class="slider-prev">Forrige uke: {{ prev }} timer</div>
-          {% endif %}
-          <input type="range" id="s-{{ loop.index }}" name="t_{{ key }}"
-                 min="0" max="40" value="{{ prev }}"
-                 oninput="oppdater({{ loop.index }})">
+          <div class="sliders-card">
+            {% for item in kat_inv %}
+              {% set ns.idx = ns.idx + 1 %}
+              {% set key = item.navn.replace(' ','_').replace('/','_') %}
+              {% set prev = forrige.get(item.navn, 0) %}
+              <div class="slider-row">
+                <div class="slider-header">
+                  <span class="slider-name">{{ item.navn }}</span>
+                  <span class="slider-val" id="val-{{ ns.idx }}">{{ prev }} <span>timer</span></span>
+                </div>
+                {% if prev > 0 %}
+                <div class="slider-prev">Forrige uke: {{ prev }} timer</div>
+                {% endif %}
+                <input type="range" id="s-{{ ns.idx }}" name="t_{{ key }}"
+                       min="0" max="40" value="{{ prev }}"
+                       oninput="oppdater({{ ns.idx }})">
+              </div>
+            {% endfor %}
+          </div>
         </div>
-        {% endfor %}
-      </div>
+        {% endif %}
+      {% endfor %}
 
       <button type="submit" class="btn-primary" id="send-btn">
         Send inn timerapport →
@@ -430,13 +474,23 @@
   });
 
   // ── SIST RAPPORTERT ─────────────────────────────────────
-  const invListe = {{ investeringer | tojson }};
   {% if siste %}
   const sisteVerdier = {{ siste.timer | tojson }};
   function lastInnSiste() {
-    invListe.forEach((inv, idx) => {
-      document.getElementById('s-' + (idx + 1)).value = sisteVerdier[inv] || 0;
-      oppdater(idx + 1);
+    // Finn sliders via name-attributt — uavhengig av rekkefølge
+    document.querySelectorAll('input[type=range]').forEach(el => {
+      const idx = parseInt(el.id.replace('s-', ''));
+      // name er t_Investering_navn → konverter tilbake
+      const navn = el.name.replace(/^t_/, '').replace(/_/g, ' ');
+      // Prøv eksakt match, eller finn key i sisteVerdier
+      let val = 0;
+      for (const [k, v] of Object.entries(sisteVerdier)) {
+        if (k.replace(/ /g, '_').replace(/\//g, '_') === el.name.replace(/^t_/, '')) {
+          val = v; break;
+        }
+      }
+      el.value = val;
+      oppdater(idx);
     });
   }
   {% endif %}

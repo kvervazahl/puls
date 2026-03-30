@@ -26,24 +26,58 @@
     .hdr-sub { font-size: .78rem; color: #93c5fd; margin-top: 2px; }
     .logout { color: #93c5fd; font-size: .82rem; text-decoration: none; }
     .logout:hover { color: #fff; }
-    .wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px; display: flex; flex-direction: column; gap: 24px; }
+    .wrap { max-width: 700px; margin: 0 auto; padding: 28px 16px; display: flex; flex-direction: column; gap: 24px; }
     .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); padding: 24px; }
     .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--blue); }
     .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-    .list-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-radius: 8px; padding: 10px 14px; font-size: .9rem; }
+    .list-item { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border-radius: 8px; padding: 10px 14px; font-size: .9rem; gap: 8px; }
     .list-item .meta { color: var(--muted); font-size: .8rem; margin-top: 2px; }
-    .list-item-left { display: flex; flex-direction: column; }
-    .btn-fjern { background: none; border: 1px solid #fca5a5; color: var(--red); border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; }
+    .list-item-left { display: flex; flex-direction: column; flex: 1; }
+    .list-item-actions { display: flex; align-items: center; gap: 8px; }
+    .btn-fjern { background: none; border: 1px solid #fca5a5; color: var(--red); border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; white-space: nowrap; }
     .btn-fjern:hover { background: #fee2e2; }
     .add-form { display: flex; gap: 8px; flex-wrap: wrap; }
-    .add-form input { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem; font-family: inherit; }
-    .add-form input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .add-form input, .add-form select { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem; font-family: inherit; background: #fff; }
+    .add-form input:focus, .add-form select:focus { outline: 2px solid var(--accent); border-color: transparent; }
     .btn-add { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: .9rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
     .btn-add:hover { background: #3b7de8; }
     .token-box { font-family: monospace; font-size: .82rem; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--muted); }
     .flash { padding: 12px 16px; border-radius: 8px; font-size: .9rem; font-weight: 500; }
     .flash.ok { background: #dcfce7; color: #166534; }
     .flash.err { background: #fee2e2; color: #991b1b; }
+
+    /* Kategori-gruppering */
+    .kat-gruppe { margin-bottom: 16px; }
+    .kat-header {
+      font-size: .72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      padding: 4px 0 8px 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .kat-badge {
+      display: inline-block;
+      font-size: .72rem;
+      font-weight: 600;
+      border-radius: 99px;
+      padding: 2px 10px;
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+    .kat-badge.Laks         { background: #d1fae5; color: #065f46; }
+    .kat-badge.Sjømat       { background: #e0f2fe; color: #0369a1; }
+    .kat-badge.Investeringer{ background: #ede9fe; color: #5b21b6; }
+    .kat-badge.Kapital      { background: #fef3c7; color: #92400e; }
+    .kat-badge.Annet        { background: #f1f5f9; color: #475569; }
+
+    /* Kategori-select inline */
+    .kat-select { font-size: .78rem; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; background: #fff; color: var(--text); cursor: pointer; }
+    .kat-select:focus { outline: 2px solid var(--accent); }
+    .btn-kat-save { background: var(--green); color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: .78rem; font-weight: 600; cursor: pointer; }
+    .btn-kat-save:hover { opacity: .85; }
 
     /* Login */
     .login-wrap { max-width: 360px; margin: 80px auto; padding: 0 16px; }
@@ -108,7 +142,7 @@
       {% endfor %}
     </div>
     <form method="post" action="/admin/brukere/legg-til" class="add-form">
-      <input type="text" name="token" placeholder="token (f.eks. ola)" required/>
+      <input type="text" name="token" placeholder="token (f.eks. torstein)" required/>
       <input type="text" name="navn" placeholder="Fullt navn" required/>
       <input type="email" name="epost" placeholder="Epost" required/>
       <button class="btn-add" type="submit">Legg til</button>
@@ -118,21 +152,54 @@
   <!-- INVESTERINGER -->
   <div class="card">
     <h2>Investeringer</h2>
-    <div class="list">
-      {% for inv in investeringer %}
-      <div class="list-item">
-        <span>{{ inv }}</span>
-        <form method="post" action="/admin/investeringer/fjern" style="margin:0">
-          <input type="hidden" name="navn" value="{{ inv }}"/>
-          <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ inv }}?')">Fjern</button>
-        </form>
+
+    {% set kategorier = ["Laks", "Sjømat", "Investeringer", "Kapital", "Annet"] %}
+    {% for kat in kategorier %}
+      {% set kat_inv = investeringer | selectattr("kategori", "equalto", kat) | list %}
+      {% if kat_inv %}
+      <div class="kat-gruppe">
+        <div class="kat-header">{{ loop.index }}. {{ kat }}</div>
+        <div class="list">
+          {% for item in kat_inv %}
+          <div class="list-item">
+            <div class="list-item-left">
+              <span>{{ item.navn }}</span>
+            </div>
+            <div class="list-item-actions">
+              <!-- Endre kategori -->
+              <form method="post" action="/admin/investeringer/endre-kategori" style="margin:0;display:flex;gap:6px;align-items:center">
+                <input type="hidden" name="navn" value="{{ item.navn }}"/>
+                <select name="kategori" class="kat-select">
+                  {% for k in kategorier %}
+                  <option value="{{ k }}" {% if k == item.kategori %}selected{% endif %}>{{ k }}</option>
+                  {% endfor %}
+                </select>
+                <button class="btn-kat-save" type="submit">Flytt</button>
+              </form>
+              <!-- Fjern -->
+              <form method="post" action="/admin/investeringer/fjern" style="margin:0">
+                <input type="hidden" name="navn" value="{{ item.navn }}"/>
+                <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ item.navn }}?')">Fjern</button>
+              </form>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
       </div>
-      {% else %}
-      <div style="color:var(--muted);font-size:.9rem">Ingen investeringer ennå.</div>
-      {% endfor %}
-    </div>
+      {% endif %}
+    {% endfor %}
+
+    {% if not investeringer %}
+    <div style="color:var(--muted);font-size:.9rem;margin-bottom:16px">Ingen investeringer ennå.</div>
+    {% endif %}
+
     <form method="post" action="/admin/investeringer/legg-til" class="add-form">
-      <input type="text" name="navn" placeholder="Navn på investering" required/>
+      <input type="text" name="navn" placeholder="Navn på investering" required style="flex:2"/>
+      <select name="kategori" style="flex:1;border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:.9rem;font-family:inherit;background:#fff">
+        {% for k in ["Laks", "Sjømat", "Investeringer", "Kapital", "Annet"] %}
+        <option value="{{ k }}">{{ k }}</option>
+        {% endfor %}
+      </select>
       <button class="btn-add" type="submit">Legg til</button>
     </form>
   </div>
