@@ -21,6 +21,7 @@ import secrets
 app = FastAPI(title="Puls")
 BASE = Path(__file__).parent
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "puls-admin")
+EXPORT_API_KEY = os.environ.get("EXPORT_API_KEY", "")
 
 # Jinja2 direkte (omgår Starlette-wrapper som har bug i Python 3.14)
 jinja_env = Environment(
@@ -62,8 +63,9 @@ def init_db():
                 epost TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS investeringer (
-                navn      TEXT PRIMARY KEY,
-                rekkefølge INTEGER NOT NULL DEFAULT 0
+                navn       TEXT PRIMARY KEY,
+                rekkefølge INTEGER NOT NULL DEFAULT 0,
+                kategori   TEXT NOT NULL DEFAULT 'Annet'
             );
             CREATE TABLE IF NOT EXISTS svar (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,28 +81,55 @@ def init_db():
                 UNIQUE(token, uke, år)
             );
         """)
+        # Migrering: legg til kategori-kolonne hvis den ikke finnes
+        cols = [r[1] for r in con.execute("PRAGMA table_info(investeringer)").fetchall()]
+        if "kategori" not in cols:
+            con.execute("ALTER TABLE investeringer ADD COLUMN kategori TEXT NOT NULL DEFAULT 'Annet'")
 
 init_db()
 
 # ── DB-hjelpefunksjoner ───────────────────────────────────────────────────────
 
+KATEGORIER = ["Laks", "Sjømat", "Investeringer", "Kapital", "Annet"]
+
 DEFAULT_INVESTERINGER = [
-    "SalMar", "Sinkaberg-Hansen", "BEWi", "Arctic Fish",
-    "Kingfish Company", "Kvarv", "Kverva-møter", "Admin / Annet",
+    {"navn": "SalMar",            "kategori": "Laks"},
+    {"navn": "Sinkaberg-Hansen",  "kategori": "Laks"},
+    {"navn": "Arctic Fish",       "kategori": "Laks"},
+    {"navn": "Kingfish Company",  "kategori": "Laks"},
+    {"navn": "LaxValoris",        "kategori": "Laks"},
+    {"navn": "Scale",             "kategori": "Sjømat"},
+    {"navn": "Pelagia",           "kategori": "Sjømat"},
+    {"navn": "Insula",            "kategori": "Sjømat"},
+    {"navn": "BEWi",              "kategori": "Investeringer"},
+    {"navn": "Salvesen & Thams",  "kategori": "Investeringer"},
+    {"navn": "Kvarv",             "kategori": "Annet"},
+    {"navn": "Kverva-møter",      "kategori": "Annet"},
+    {"navn": "Styremøter",        "kategori": "Annet"},
+    {"navn": "Admin / Annet",     "kategori": "Annet"},
 ]
 
-def les_investeringer() -> list:
+def les_investeringer() -> list[dict]:
+    """Returnerer liste av dicts: [{navn, kategori}, ...]"""
     with db() as con:
-        rader = con.execute("SELECT navn FROM investeringer ORDER BY rekkefølge").fetchall()
+        rader = con.execute("SELECT navn, kategori FROM investeringer ORDER BY rekkefølge").fetchall()
     if not rader:
         return DEFAULT_INVESTERINGER
-    return [r["navn"] for r in rader]
+    return [{"navn": r["navn"], "kategori": r["kategori"]} for r in rader]
 
-def lagre_investeringer(liste: list):
+def les_inv_navn() -> list[str]:
+    """Kun navneliste — for bakoverkompatibel bruk."""
+    return [i["navn"] for i in les_investeringer()]
+
+def lagre_investeringer(liste: list[dict]):
+    """liste = [{navn, kategori}, ...]"""
     with db() as con:
         con.execute("DELETE FROM investeringer")
-        for i, navn in enumerate(liste):
-            con.execute("INSERT OR REPLACE INTO investeringer (navn, rekkefølge) VALUES (?,?)", (navn, i))
+        for i, item in enumerate(liste):
+            con.execute(
+                "INSERT OR REPLACE INTO investeringer (navn, rekkefølge, kategori) VALUES (?,?,?)",
+                (item["navn"], i, item.get("kategori", "Annet"))
+            )
 
 def finn_bruker(token: str):
     with db() as con:
@@ -350,7 +379,7 @@ async def send_inn(request: Request, token: str):
         år  = int(form.get("_år",  nå_år))
     except (ValueError, TypeError):
         uke, år = nå_uke, nå_år
-    investeringer = les_investeringer()
+    investeringer = les_inv_navn()
     timer = {}
     total = 0
     for inv in investeringer:
@@ -467,11 +496,12 @@ async def admin_legg_til_inv(request: Request):
     if not er_innlogget(request):
         return RedirectResponse("/admin", status_code=303)
     form = await request.form()
-    navn = form.get("navn", "").strip()
+    navn     = form.get("navn", "").strip()
+    kategori = form.get("kategori", "Annet").strip()
     if navn:
         inv = les_investeringer()
-        if navn not in inv:
-            inv.append(navn)
+        if navn not in [i["navn"] for i in inv]:
+            inv.append({"navn": navn, "kategori": kategori})
             lagre_investeringer(inv)
     return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
 
@@ -481,13 +511,29 @@ async def admin_fjern_inv(request: Request):
         return RedirectResponse("/admin", status_code=303)
     form = await request.form()
     navn = form.get("navn", "").strip()
-    lagre_investeringer([i for i in les_investeringer() if i != navn])
+    lagre_investeringer([i for i in les_investeringer() if i["navn"] != navn])
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
+
+@app.post("/admin/investeringer/endre-kategori")
+async def admin_endre_kategori(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    navn     = form.get("navn", "").strip()
+    kategori = form.get("kategori", "Annet").strip()
+    inv = les_investeringer()
+    for i in inv:
+        if i["navn"] == navn:
+            i["kategori"] = kategori
+            break
+    lagre_investeringer(inv)
+    return RedirectResponse(f"/admin?melding={navn}+oppdatert", status_code=303)
 
 
 @app.get("/admin/eksport.csv")
-async def eksport_csv(request: Request):
-    if not er_innlogget(request):
+async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)):
+    api_key_ok = EXPORT_API_KEY and key and secrets.compare_digest(key, EXPORT_API_KEY)
+    if not api_key_ok and not er_innlogget(request):
         return HTMLResponse("Ikke innlogget", status_code=401)
     with db() as con:
         rader = con.execute("SELECT * FROM svar ORDER BY år, uke, navn").fetchall()
