@@ -166,13 +166,15 @@ Ny tab eller seksjon i Streamlit-appen viser:
 
 ---
 
-## Kostnadssammenligning
+## Åpne oppgaver
 
-| | JotForm | Puls (denne løsningen) |
-|--|---------|----------------------|
-| Skjema | ✅ | ✅ |
-| Ukentlig utsending | ✅ Power Automate | ✅ Graph API |
-| Purringer | Manuell | ✅ Automatisk |
-| Data i SharePoint | Nei | ✅ Direkte |
-| Investeringsliste automatisk | Nei | ✅ Fra INP_Avk |
-| Kostnad | X kr/mnd | ~0 kr/mnd |
+### Problem 1 — Power BI-kobling
+Svardata ligger i SQLite på Azure (`/home/data/puls.db`). Power BI må hente data fra appen.
+Eksport-endepunkt finnes allerede: `GET /admin/eksport.csv?key=KvervaExport2026`
+Mulige løsninger:
+- Power BI Web-kobling mot CSV-endepunktet (enklest)
+- Scheduled export til SharePoint via GitHub Actions
+
+### Problem 2 — Historiske data
+Tidligere perioder (fra JotForm-tiden) mangler i databasen.
+Må importeres manuelt — enten via admin-portalen eller et eget import-script mot SQLite.
