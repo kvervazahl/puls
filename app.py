@@ -534,7 +534,7 @@ async def admin_endre_kategori(request: Request):
 async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)):
     api_key_ok = EXPORT_API_KEY and key and secrets.compare_digest(key, EXPORT_API_KEY)
     if not api_key_ok and not er_innlogget(request):
-        return HTMLResponse("Ikke innlogget", status_code=401)
+        return HTMLResponse("Ikke innlogget", status_code=403)
     with db() as con:
         rader = con.execute("SELECT * FROM svar ORDER BY år, uke, navn").fetchall()
     linjer = ["Navn,Epost,Uke,År,Investering,Timer,Tidspunkt"]
