@@ -58,6 +58,23 @@
     .kat-badge.Kapital       { background: #fef3c7; color: #92400e; }
     .total-row td { font-weight: 700; background: #f8fafc; border-top: 2px solid var(--border); }
     .ytd-badge { font-size: .7rem; color: var(--muted); background: #f1f5f9; border-radius: 4px; padding: 1px 6px; margin-left: 4px; }
+
+    /* Accordion per person */
+    .person-row { cursor: pointer; }
+    .person-row:hover td { background: #f0f9ff; }
+    .person-row td:first-child { user-select: none; }
+    .chevron { display: inline-block; font-size: .7rem; margin-right: 6px; color: var(--muted); transition: transform .18s; }
+    .person-row.open .chevron { transform: rotate(90deg); }
+    .detail-row { display: none; }
+    .detail-row.open { display: table-row; }
+    .detail-inner { padding: 0 12px 14px 32px; }
+    .detail-table { width: 100%; border-collapse: collapse; font-size: .82rem; margin-top: 6px; }
+    .detail-table th { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 4px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+    .detail-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; }
+    .detail-table tr:last-child td { border-bottom: none; font-weight: 600; background: #f8fafc; }
+    .detail-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .bar-wrap { background: #e2e8f0; border-radius: 99px; height: 6px; width: 80px; display: inline-block; vertical-align: middle; }
+    .bar-fill { background: var(--accent); border-radius: 99px; height: 100%; }
     .feil { background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 12px 16px; font-size: .9rem; }
     .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
     .result-header h2 { margin-bottom: 0; }
@@ -127,8 +144,9 @@
       </thead>
       <tbody>
         {% for p in beregning.personer %}
-        <tr>
-          <td>{{ p.navn }}</td>
+        {% set pid = loop.index %}
+        <tr class="person-row" onclick="togglePerson({{ pid }})">
+          <td><span class="chevron">▶</span>{{ p.navn }}</td>
           <td>
             {% if p.team == 'støtte' %}
               <span style="font-size:.75rem;background:#fef3c7;color:#92400e;border-radius:99px;padding:2px 8px;font-weight:600">Støtte</span>
@@ -150,6 +168,49 @@
             {% else %}
               <span style="font-size:.82rem;color:var(--green)">Denne måneden</span>
             {% endif %}
+          </td>
+        </tr>
+        <tr class="detail-row" id="detail-{{ pid }}">
+          <td colspan="7" style="padding:0;background:#f8fafc;border-bottom:1px solid var(--border)">
+            <div class="detail-inner">
+              {% if p.inv_kostnad %}
+              {% set total_kr = p.kostnad_person %}
+              <table class="detail-table">
+                <thead>
+                  <tr>
+                    <th>Investering</th>
+                    <th class="num">Timer</th>
+                    <th class="num">Andel</th>
+                    <th></th>
+                    <th class="num">Kostnad (kr)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% set sorted_inv = p.inv_kostnad.items() | sort(attribute=1, reverse=True) %}
+                  {% for inv, kr in sorted_inv %}
+                  {% if kr > 0 %}
+                  {% set pct = (kr / total_kr * 100) if total_kr > 0 else 0 %}
+                  <tr>
+                    <td>{{ inv }}</td>
+                    <td class="num">{{ "%.1f"|format(p.timer.get(inv, 0)) }}</td>
+                    <td class="num">{{ "%.1f"|format(pct) }} %</td>
+                    <td style="width:90px">
+                      <div class="bar-wrap"><div class="bar-fill" style="width:{{ [pct, 100]|min }}%"></div></div>
+                    </td>
+                    <td class="num">{{ "{:,.0f}".format(kr).replace(",", " ") }}</td>
+                  </tr>
+                  {% endif %}
+                  {% endfor %}
+                  <tr>
+                    <td colspan="4">Totalt</td>
+                    <td class="num">{{ "{:,.0f}".format(total_kr).replace(",", " ") }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              {% else %}
+              <div style="color:var(--muted);font-size:.85rem;padding:8px 0">Ingen allokerte kostnader.</div>
+              {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -206,5 +267,14 @@
   {% endif %}
 
 </div>
+<script>
+  function togglePerson(id) {
+    const row = document.getElementById('detail-' + id);
+    const trigger = row.previousElementSibling;
+    const isOpen = row.classList.contains('open');
+    row.classList.toggle('open', !isOpen);
+    trigger.classList.toggle('open', !isOpen);
+  }
+</script>
 </body>
 </html>
