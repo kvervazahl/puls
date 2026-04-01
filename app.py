@@ -17,6 +17,7 @@ import uvicorn
 import openpyxl
 import os
 import secrets
+import calendar
 
 app = FastAPI(title="Puls")
 BASE = Path(__file__).parent
@@ -60,7 +61,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS brukere (
                 token TEXT PRIMARY KEY,
                 navn  TEXT NOT NULL,
-                epost TEXT NOT NULL
+                epost TEXT NOT NULL,
+                lønn  INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS investeringer (
                 navn       TEXT PRIMARY KEY,
@@ -85,6 +87,10 @@ def init_db():
         cols = [r[1] for r in con.execute("PRAGMA table_info(investeringer)").fetchall()]
         if "kategori" not in cols:
             con.execute("ALTER TABLE investeringer ADD COLUMN kategori TEXT NOT NULL DEFAULT 'Annet'")
+        # Migrering: legg til lønn-kolonne på brukere
+        cols_b = [r[1] for r in con.execute("PRAGMA table_info(brukere)").fetchall()]
+        if "lønn" not in cols_b:
+            con.execute("ALTER TABLE brukere ADD COLUMN lønn INTEGER NOT NULL DEFAULT 0")
 
 init_db()
 
@@ -138,12 +144,16 @@ def finn_bruker(token: str):
 
 def hent_alle_brukere() -> dict:
     with db() as con:
-        rader = con.execute("SELECT token, navn, epost FROM brukere").fetchall()
-    return {r["token"]: {"navn": r["navn"], "epost": r["epost"]} for r in rader}
+        rader = con.execute("SELECT token, navn, epost, lønn FROM brukere").fetchall()
+    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"]} for r in rader}
 
 def lagre_bruker(token: str, navn: str, epost: str):
     with db() as con:
         con.execute("INSERT OR REPLACE INTO brukere (token, navn, epost) VALUES (?,?,?)", (token, navn, epost))
+
+def sett_lønn_bruker(token: str, lønn: int):
+    with db() as con:
+        con.execute("UPDATE brukere SET lønn=? WHERE token=?", (lønn, token))
 
 def fjern_bruker(token: str) -> str:
     with db() as con:
@@ -342,6 +352,109 @@ def manglende_uker(token: str, nå_uke: int, nå_år: int) -> list:
         ).fetchall()}
     return [(u, nå_år) for u in range(1, nå_uke) if (u, nå_år) not in rapporterte]
 
+# ── Kostnadsfordeling ────────────────────────────────────────────────────────
+
+MÅNEDS_NAVN = ["Januar","Februar","Mars","April","Mai","Juni",
+               "Juli","August","September","Oktober","November","Desember"]
+
+def finn_uker_for_måned(måned: int, år: int) -> list:
+    _, days = calendar.monthrange(år, måned)
+    uker = set()
+    for dag in range(1, days + 1):
+        iso = date(år, måned, dag).isocalendar()
+        uker.add((iso[1], iso[0]))
+    return list(uker)
+
+def hent_timer_for_uker(token: str, uker: list, inkl_navn: set) -> dict:
+    timer_inv: dict = {}
+    for (uke, å) in uker:
+        with db() as con:
+            r = con.execute("SELECT * FROM svar WHERE token=? AND uke=? AND år=?", (token, uke, å)).fetchone()
+        if r:
+            s = _rad_til_svar(r)
+            if not s["fravær"]:
+                for inv, t in s["timer"].items():
+                    if inv in inkl_navn and t > 0:
+                        timer_inv[inv] = timer_inv.get(inv, 0) + t
+    return timer_inv
+
+def hent_ytd_snitt(token: str, aktuell_måned: int, år: int, inkl_navn: set) -> dict:
+    måneder_data = []
+    for m in range(1, aktuell_måned):
+        uker = finn_uker_for_måned(m, år)
+        t = hent_timer_for_uker(token, uker, inkl_navn)
+        if t:
+            måneder_data.append(t)
+    if not måneder_data:
+        return {}
+    snitt: dict = {}
+    for md in måneder_data:
+        for inv, t in md.items():
+            snitt[inv] = snitt.get(inv, 0) + t
+    return {inv: t / len(måneder_data) for inv, t in snitt.items()}
+
+def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
+    uker = finn_uker_for_måned(måned, år)
+    inkl_inv = [i for i in les_investeringer() if i["kategori"] != "Annet"]
+    inkl_navn = {i["navn"] for i in inkl_inv}
+    inv_order = {i["navn"]: idx for idx, i in enumerate(inkl_inv)}
+
+    with db() as con:
+        brukere_rader = con.execute("SELECT token, navn, lønn FROM brukere ORDER BY navn").fetchall()
+
+    # Alle har lønn=0 → lik vekt (1)
+    alle_lønn = [b["lønn"] for b in brukere_rader if b["lønn"] and b["lønn"] > 0]
+    bruk_lønn = len(alle_lønn) > 0
+
+    personer = []
+    for b in brukere_rader:
+        lønn_vekt = b["lønn"] if (bruk_lønn and b["lønn"] and b["lønn"] > 0) else (min(alle_lønn) if alle_lønn else 1)
+        timer = hent_timer_for_uker(b["token"], uker, inkl_navn)
+        brukt_ytd = False
+        if sum(timer.values()) == 0:
+            timer = hent_ytd_snitt(b["token"], måned, år, inkl_navn)
+            brukt_ytd = bool(timer)
+        personer.append({
+            "token": b["token"],
+            "navn": b["navn"],
+            "lønn": b["lønn"] or 0,
+            "lønn_vekt": lønn_vekt,
+            "timer": timer,
+            "total_timer": round(sum(timer.values()), 1),
+            "brukt_ytd": brukt_ytd,
+        })
+
+    inv_vektede: dict = {}
+    total_vektede = 0.0
+    for p in personer:
+        for inv, t in p["timer"].items():
+            vektet = t * p["lønn_vekt"]
+            inv_vektede[inv] = inv_vektede.get(inv, 0.0) + vektet
+            total_vektede += vektet
+
+    resultat = []
+    for inv_navn in sorted(inv_vektede.keys(), key=lambda n: inv_order.get(n, 999)):
+        vektede = inv_vektede[inv_navn]
+        nøkkel = vektede / total_vektede if total_vektede > 0 else 0
+        kat = next((i["kategori"] for i in inkl_inv if i["navn"] == inv_navn), "")
+        resultat.append({
+            "investering": inv_navn,
+            "kategori": kat,
+            "vektede_timer": round(vektede, 1),
+            "prosent": round(nøkkel * 100, 2),
+            "kostnad": round(total_kostnad * nøkkel),
+        })
+
+    return {
+        "resultat": resultat,
+        "total_vektede_timer": round(total_vektede, 1),
+        "total_kostnad": total_kostnad,
+        "personer": personer,
+        "måned": måned,
+        "år": år,
+        "måned_navn": MÅNEDS_NAVN[måned - 1],
+    }
+
 # ── Ruter ────────────────────────────────────────────────────────────────────
 
 @app.get("/puls/{token}", response_class=HTMLResponse)
@@ -514,6 +627,20 @@ async def admin_fjern_inv(request: Request):
     lagre_investeringer([i for i in les_investeringer() if i["navn"] != navn])
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
 
+@app.post("/admin/brukere/sett-lønn")
+async def admin_sett_lønn(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    token = form.get("token", "").strip()
+    raw = form.get("lønn", "0").replace(" ", "").replace("\u00a0", "").replace(",", "").replace(".", "") or "0"
+    try:
+        lønn = int(raw)
+    except ValueError:
+        lønn = 0
+    sett_lønn_bruker(token, lønn)
+    return RedirectResponse("/admin?melding=Lønn+oppdatert", status_code=303)
+
 @app.post("/admin/investeringer/reorder")
 async def admin_reorder_inv(request: Request):
     if not er_innlogget(request):
@@ -546,6 +673,50 @@ async def api_brukere(request: Request, key: Optional[str] = Query(default=None)
     with db() as con:
         rader = con.execute("SELECT navn, epost FROM brukere ORDER BY navn").fetchall()
     return JSONResponse([{"navn": r["navn"], "epost": r["epost"]} for r in rader])
+
+@app.get("/admin/fordeling", response_class=HTMLResponse)
+async def admin_fordeling_get(request: Request,
+                               total_kostnad: Optional[float] = Query(None),
+                               måned: Optional[int] = Query(None),
+                               år: Optional[int] = Query(None)):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    beregning = None
+    feil = None
+    if total_kostnad is not None and måned is not None and år is not None:
+        try:
+            beregning = beregn_fordeling(total_kostnad, måned, år)
+        except Exception as e:
+            feil = str(e)
+    today = date.today()
+    return render("fordeling.html",
+        beregning=beregning,
+        feil=feil,
+        default_måned=måned or today.month,
+        default_år=år or today.year,
+        default_kostnad=total_kostnad or "",
+        måneder=list(enumerate(MÅNEDS_NAVN, 1)),
+    )
+
+@app.get("/admin/fordeling/eksport.csv")
+async def admin_fordeling_eksport(request: Request,
+                                   total_kostnad: float = Query(...),
+                                   måned: int = Query(...),
+                                   år: int = Query(...)):
+    if not er_innlogget(request):
+        return HTMLResponse("Ikke innlogget", status_code=403)
+    beregning = beregn_fordeling(total_kostnad, måned, år)
+    dato_str = date(år, måned, 1).strftime("%Y-%m-%d")
+    linjer = ["investering,dato,sum,kommentar"]
+    for rad in beregning["resultat"]:
+        kommentar = f"{rad['prosent']}% av total"
+        linjer.append(f'"{rad["investering"]}",{dato_str},{rad["kostnad"]},"{kommentar}"')
+    csv_data = "\n".join(linjer)
+    return Response(
+        content=csv_data.encode("utf-8-sig"),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename=fordeling_{år}-{måned:02d}.csv'},
+    )
 
 @app.get("/admin/eksport.csv")
 async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)):

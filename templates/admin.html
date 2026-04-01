@@ -125,6 +125,16 @@
   <div class="flash ok">{{ melding }}</div>
   {% endif %}
 
+  <!-- KOSTNADSFORDELING SNARVEI -->
+  <a href="/admin/fordeling" style="display:flex;align-items:center;gap:12px;background:var(--blue);color:#fff;border-radius:var(--radius);padding:18px 24px;text-decoration:none;font-weight:600;">
+    <span style="font-size:1.3rem">📊</span>
+    <div>
+      <div>Kostnadsfordeling</div>
+      <div style="font-size:.78rem;color:#93c5fd;font-weight:400;margin-top:2px">Fordel månedlige kostnader per investering</div>
+    </div>
+    <span style="margin-left:auto;font-size:1.1rem">→</span>
+  </a>
+
   <!-- BRUKERE -->
   <div class="card">
     <h2>Brukere</h2>
@@ -135,6 +145,12 @@
           <strong>{{ b.navn }}</strong>
           <div class="meta">{{ b.epost }} &nbsp;·&nbsp; <span class="token-box">{{ token }}</span></div>
           <div class="meta">Link: /puls/{{ token }}</div>
+          <form method="post" action="/admin/brukere/sett-lønn" style="margin:4px 0 0;display:flex;gap:6px;align-items:center">
+            <input type="hidden" name="token" value="{{ token }}"/>
+            <input type="number" name="lønn" value="{{ b.lønn or '' }}" placeholder="Årslønn (0 = lik vekt)"
+              style="width:180px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:.8rem;font-family:inherit"/>
+            <button type="submit" class="btn-kat-save" style="font-size:.78rem">Lagre lønn</button>
+          </form>
         </div>
         <form method="post" action="/admin/brukere/fjern" style="margin:0">
           <input type="hidden" name="token" value="{{ token }}"/>
