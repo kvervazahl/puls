@@ -371,6 +371,20 @@ def finn_uker_for_måned(måned: int, år: int) -> list:
         uker.add((iso[1], iso[0]))
     return list(uker)
 
+def hent_alle_timer_for_uker(token: str, uker: list) -> dict:
+    """Returnerer alle timer inkl. Annet-kategorier."""
+    timer_inv: dict = {}
+    for (uke, å) in uker:
+        with db() as con:
+            r = con.execute("SELECT * FROM svar WHERE token=? AND uke=? AND år=?", (token, uke, å)).fetchone()
+        if r:
+            s = _rad_til_svar(r)
+            if not s["fravær"]:
+                for inv, t in s["timer"].items():
+                    if t > 0:
+                        timer_inv[inv] = timer_inv.get(inv, 0) + t
+    return timer_inv
+
 def hent_timer_for_uker(token: str, uker: list, inkl_navn: set) -> dict:
     timer_inv: dict = {}
     for (uke, å) in uker:
@@ -418,52 +432,78 @@ def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
         kostnad_person = total_kostnad * andel
         team = b["team"] or "investering"
 
-        timer = hent_timer_for_uker(b["token"], uker, inkl_navn)
-        brukt_ytd = False
-        # YTD-fallback for investeringsteam (støtte håndteres separat nedenfor)
-        if sum(timer.values()) == 0 and team == "investering":
-            timer = hent_ytd_snitt(b["token"], måned, år, inkl_navn)
-            brukt_ytd = bool(timer)
+        if team == "investering":
+            # Investeringsteam: kun inkluderte investeringer, YTD-fallback
+            timer = hent_timer_for_uker(b["token"], uker, inkl_navn)
+            brukt_ytd = False
+            if sum(timer.values()) == 0:
+                timer = hent_ytd_snitt(b["token"], måned, år, inkl_navn)
+                brukt_ytd = bool(timer)
+            total_timer = sum(timer.values())
+            inv_kostnad_person: dict = {}
+            if total_timer > 0:
+                for inv, t in timer.items():
+                    inv_kostnad_person[inv] = kostnad_person * (t / total_timer)
+            personer.append({
+                "token": b["token"], "navn": b["navn"], "lønn": b["lønn"] or 0,
+                "team": team, "andel_prosent": round(andel * 100, 2),
+                "kostnad_person": round(kostnad_person),
+                "timer": timer, "total_timer": round(total_timer, 1),
+                "annet_timer": 0, "annet_kostnad": 0,
+                "inv_kostnad": inv_kostnad_person,
+                "brukt_ytd": brukt_ytd, "brukt_team_nøkkel": False,
+                "ingen_timer": total_timer == 0,
+            })
 
-        total_timer = sum(timer.values())
+        else:  # støtte
+            # Hent ALLE timer inkl. Annet for å finne riktig proporsjon
+            alle_timer = hent_alle_timer_for_uker(b["token"], uker)
+            alle_total = sum(alle_timer.values())
+            inkl_timer = {k: v for k, v in alle_timer.items() if k in inkl_navn}
+            inkl_total = sum(inkl_timer.values())
+            annet_total = alle_total - inkl_total
 
-        inv_kostnad_person: dict = {}
-        if total_timer > 0:
-            for inv, t in timer.items():
-                inv_kostnad_person[inv] = kostnad_person * (t / total_timer)
+            inv_kostnad_person = {}
+            annet_kostnad = 0.0
 
-        personer.append({
-            "token": b["token"],
-            "navn": b["navn"],
-            "lønn": b["lønn"] or 0,
-            "team": team,
-            "andel_prosent": round(andel * 100, 2),
-            "kostnad_person": round(kostnad_person),
-            "timer": timer,
-            "total_timer": round(total_timer, 1),
-            "inv_kostnad": inv_kostnad_person,
-            "brukt_ytd": brukt_ytd,
-            "brukt_team_nøkkel": False,
-            "ingen_timer": total_timer == 0,
-        })
+            if alle_total > 0:
+                # Steg 1: direkte allokering fra investeringstimer
+                for inv, t in inkl_timer.items():
+                    inv_kostnad_person[inv] = kostnad_person * (t / alle_total)
+                # Steg 2: resten (Annet-timer) → team-nøkkel i neste pass
+                annet_kostnad = kostnad_person * (annet_total / alle_total)
+            else:
+                # Ingen timer i det hele tatt → alt til team-nøkkel
+                annet_kostnad = kostnad_person
 
-    # Bygg team-nøkkel fra alle som har egne allokerte timer
-    inv_kr_med_timer: dict = {}
-    totalt_kr_med_timer = 0.0
+            personer.append({
+                "token": b["token"], "navn": b["navn"], "lønn": b["lønn"] or 0,
+                "team": team, "andel_prosent": round(andel * 100, 2),
+                "kostnad_person": round(kostnad_person),
+                "timer": inkl_timer, "total_timer": round(inkl_total, 1),
+                "annet_timer": round(annet_total, 1), "annet_kostnad": annet_kostnad,
+                "inv_kostnad": inv_kostnad_person,
+                "brukt_ytd": False, "brukt_team_nøkkel": False,
+                "ingen_timer": alle_total == 0,
+            })
+
+    # Bygg team-nøkkel fra alle direkte allokerte investeringskostnader
+    inv_kr_direkte: dict = {}
+    totalt_kr_direkte = 0.0
     for p in personer:
-        if p["total_timer"] > 0:
-            for inv, kr in p["inv_kostnad"].items():
-                inv_kr_med_timer[inv] = inv_kr_med_timer.get(inv, 0.0) + kr
-                totalt_kr_med_timer += kr
+        for inv, kr in p["inv_kostnad"].items():
+            inv_kr_direkte[inv] = inv_kr_direkte.get(inv, 0.0) + kr
+            totalt_kr_direkte += kr
 
-    team_nøkkel = {inv: kr / totalt_kr_med_timer for inv, kr in inv_kr_med_timer.items()} if totalt_kr_med_timer > 0 else {}
+    team_nøkkel = {inv: kr / totalt_kr_direkte for inv, kr in inv_kr_direkte.items()} if totalt_kr_direkte > 0 else {}
 
-    # Støtte-ansatte uten allokerte timer → fordel etter team-nøkkel
+    # Støtte: fordel annet_kostnad via team-nøkkel
     for p in personer:
-        if p["total_timer"] == 0 and p["team"] == "støtte" and team_nøkkel:
-            p["inv_kostnad"] = {inv: p["kostnad_person"] * nøkkel for inv, nøkkel in team_nøkkel.items()}
-            p["ingen_timer"] = False
+        if p["team"] == "støtte" and p["annet_kostnad"] > 0 and team_nøkkel:
+            for inv, nøkkel in team_nøkkel.items():
+                p["inv_kostnad"][inv] = p["inv_kostnad"].get(inv, 0.0) + p["annet_kostnad"] * nøkkel
             p["brukt_team_nøkkel"] = True
+            p["ingen_timer"] = False
 
     # Summer kostnad per investering på tvers av alle personer
     inv_kostnad_total: dict = {}
