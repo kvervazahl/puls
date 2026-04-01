@@ -107,54 +107,20 @@
 
   {% if beregning %}
 
-  <!-- RESULTAT PER INVESTERING -->
-  <div class="card">
-    <div class="result-header">
-      <h2>Fordeling — {{ beregning.måned_navn }} {{ beregning.år }}</h2>
-      <a class="btn-export"
-         href="/admin/fordeling/eksport.csv?total_kostnad={{ beregning.total_kostnad }}&måned={{ beregning.måned }}&år={{ beregning.år }}">
-        Last ned CSV
-      </a>
-    </div>
-    <table>
-      <thead>
-        <tr>
-          <th>Investering</th>
-          <th>Kategori</th>
-          <th class="num">Vektede timer</th>
-          <th class="num">Andel</th>
-          <th class="num">Kostnad (kr)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rad in beregning.resultat %}
-        <tr>
-          <td>{{ rad.investering }}</td>
-          <td><span class="kat-badge {{ rad.kategori }}">{{ rad.kategori }}</span></td>
-          <td class="num">{{ "%.1f"|format(rad.vektede_timer) }}</td>
-          <td class="num">{{ "%.2f"|format(rad.prosent) }} %</td>
-          <td class="num">{{ "{:,.0f}".format(rad.kostnad).replace(",", " ") }}</td>
-        </tr>
-        {% endfor %}
-        <tr class="total-row">
-          <td colspan="2">Totalt</td>
-          <td class="num">{{ "%.1f"|format(beregning.total_vektede_timer) }}</td>
-          <td class="num">100,00 %</td>
-          <td class="num">{{ "{:,.0f}".format(beregning.total_kostnad)|replace(",", " ") }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
   <!-- DETALJER PER PERSON -->
   <div class="card">
-    <h2>Grunnlag per person</h2>
+    <h2>Grunnlag per person — {{ beregning.måned_navn }} {{ beregning.år }}</h2>
+    <div style="font-size:.82rem;color:var(--muted);margin-bottom:12px">
+      Total lønn (sum alle): <strong>{{ "{:,.0f}".format(beregning.total_lønn).replace(",", " ") }} kr</strong>
+    </div>
     <table>
       <thead>
         <tr>
           <th>Person</th>
           <th class="num">Årslønn</th>
-          <th class="num">Inkl. timer</th>
+          <th class="num">Andel</th>
+          <th class="num">Kostnad tildelt</th>
+          <th class="num">Timer (inkl.)</th>
           <th>Kilde</th>
         </tr>
       </thead>
@@ -163,10 +129,12 @@
         <tr>
           <td>{{ p.navn }}</td>
           <td class="num">{% if p.lønn %}{{ "{:,.0f}".format(p.lønn).replace(",", " ") }}{% else %}<span style="color:var(--muted)">lik vekt</span>{% endif %}</td>
+          <td class="num">{{ "%.2f"|format(p.andel_prosent) }} %</td>
+          <td class="num">{% if not p.ingen_timer %}{{ "{:,.0f}".format(p.kostnad_person).replace(",", " ") }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
           <td class="num">{{ "%.1f"|format(p.total_timer) }}</td>
           <td>
-            {% if p.total_timer == 0 %}
-              <span style="color:var(--muted);font-size:.82rem">Ingen timer</span>
+            {% if p.ingen_timer %}
+              <span style="color:var(--red);font-size:.82rem">Ingen timer — ikke fordelt</span>
             {% elif p.brukt_ytd %}
               <span class="ytd-badge">YTD-snitt</span>
             {% else %}
@@ -178,9 +146,50 @@
       </tbody>
     </table>
     <div style="font-size:.78rem;color:var(--muted);margin-top:12px">
-      * Vektede timer = råtimer × lønnsvekt. Kun investeringer (ikke «Annet») er inkludert.<br>
-      * YTD-snitt brukes for personer uten timer denne måneden (ferie etc.).
+      Andel = årslønn / total lønn. Kun investeringer (ikke «Annet») inkluderes i timegrunnlaget.<br>
+      YTD-snitt brukes for de som ikke har rapportert timer denne måneden.
     </div>
+  </div>
+
+  <!-- RESULTAT PER INVESTERING -->
+  <div class="card">
+    <div class="result-header">
+      <h2>Fordeling per investering</h2>
+      <a class="btn-export"
+         href="/admin/fordeling/eksport.csv?total_kostnad={{ beregning.total_kostnad }}&måned={{ beregning.måned }}&år={{ beregning.år }}">
+        Last ned CSV
+      </a>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Investering</th>
+          <th>Kategori</th>
+          <th class="num">Andel</th>
+          <th class="num">Kostnad (kr)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rad in beregning.resultat %}
+        <tr>
+          <td>{{ rad.investering }}</td>
+          <td><span class="kat-badge {{ rad.kategori }}">{{ rad.kategori }}</span></td>
+          <td class="num">{{ "%.2f"|format(rad.prosent) }} %</td>
+          <td class="num">{{ "{:,.0f}".format(rad.kostnad).replace(",", " ") }}</td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+          <td colspan="2">Totalt fordelt</td>
+          <td class="num"></td>
+          <td class="num">{{ "{:,.0f}".format(beregning.totalt_fordelt).replace(",", " ") }}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% if beregning.totalt_fordelt != beregning.total_kostnad|int %}
+    <div style="font-size:.78rem;color:var(--muted);margin-top:8px">
+      Differanse på {{ "{:,.0f}".format(beregning.total_kostnad - beregning.totalt_fordelt).replace(",", " ") }} kr skyldes personer uten timer (ikke fordelt) eller avrunding.
+    </div>
+    {% endif %}
   </div>
 
   {% endif %}

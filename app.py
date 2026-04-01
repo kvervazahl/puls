@@ -402,52 +402,65 @@ def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
     with db() as con:
         brukere_rader = con.execute("SELECT token, navn, lønn FROM brukere ORDER BY navn").fetchall()
 
-    # Alle har lønn=0 → lik vekt (1)
-    alle_lønn = [b["lønn"] for b in brukere_rader if b["lønn"] and b["lønn"] > 0]
-    bruk_lønn = len(alle_lønn) > 0
+    # lønn=0 → telles som 1 (lik vekt)
+    total_lønn = sum(max(b["lønn"] or 0, 1) for b in brukere_rader)
 
     personer = []
     for b in brukere_rader:
-        lønn_vekt = b["lønn"] if (bruk_lønn and b["lønn"] and b["lønn"] > 0) else (min(alle_lønn) if alle_lønn else 1)
+        lønn = max(b["lønn"] or 0, 1)
+        andel = lønn / total_lønn
+        kostnad_person = total_kostnad * andel
+
         timer = hent_timer_for_uker(b["token"], uker, inkl_navn)
         brukt_ytd = False
         if sum(timer.values()) == 0:
             timer = hent_ytd_snitt(b["token"], måned, år, inkl_navn)
             brukt_ytd = bool(timer)
+
+        total_timer = sum(timer.values())
+
+        # Fordel denne personens kostnad etter timefordelingen
+        inv_kostnad_person: dict = {}
+        if total_timer > 0:
+            for inv, t in timer.items():
+                inv_kostnad_person[inv] = kostnad_person * (t / total_timer)
+
         personer.append({
             "token": b["token"],
             "navn": b["navn"],
             "lønn": b["lønn"] or 0,
-            "lønn_vekt": lønn_vekt,
+            "andel_prosent": round(andel * 100, 2),
+            "kostnad_person": round(kostnad_person),
             "timer": timer,
-            "total_timer": round(sum(timer.values()), 1),
+            "total_timer": round(total_timer, 1),
+            "inv_kostnad": inv_kostnad_person,
             "brukt_ytd": brukt_ytd,
+            "ingen_timer": total_timer == 0,
         })
 
-    inv_vektede: dict = {}
-    total_vektede = 0.0
+    # Summer kostnad per investering på tvers av alle personer
+    inv_kostnad_total: dict = {}
     for p in personer:
-        for inv, t in p["timer"].items():
-            vektet = t * p["lønn_vekt"]
-            inv_vektede[inv] = inv_vektede.get(inv, 0.0) + vektet
-            total_vektede += vektet
+        for inv, kr in p["inv_kostnad"].items():
+            inv_kostnad_total[inv] = inv_kostnad_total.get(inv, 0.0) + kr
 
     resultat = []
-    for inv_navn in sorted(inv_vektede.keys(), key=lambda n: inv_order.get(n, 999)):
-        vektede = inv_vektede[inv_navn]
-        nøkkel = vektede / total_vektede if total_vektede > 0 else 0
+    for inv_navn in sorted(inv_kostnad_total.keys(), key=lambda n: inv_order.get(n, 999)):
+        kr = inv_kostnad_total[inv_navn]
         kat = next((i["kategori"] for i in inkl_inv if i["navn"] == inv_navn), "")
         resultat.append({
             "investering": inv_navn,
             "kategori": kat,
-            "vektede_timer": round(vektede, 1),
-            "prosent": round(nøkkel * 100, 2),
-            "kostnad": round(total_kostnad * nøkkel),
+            "prosent": round(kr / total_kostnad * 100, 2) if total_kostnad else 0,
+            "kostnad": round(kr),
         })
+
+    totalt_fordelt = sum(r["kostnad"] for r in resultat)
 
     return {
         "resultat": resultat,
-        "total_vektede_timer": round(total_vektede, 1),
+        "total_lønn": total_lønn,
+        "totalt_fordelt": totalt_fordelt,
         "total_kostnad": total_kostnad,
         "personer": personer,
         "måned": måned,
