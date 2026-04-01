@@ -145,12 +145,22 @@
           <strong>{{ b.navn }}</strong>
           <div class="meta">{{ b.epost }} &nbsp;·&nbsp; <span class="token-box">{{ token }}</span></div>
           <div class="meta">Link: /puls/{{ token }}</div>
-          <form method="post" action="/admin/brukere/sett-lønn" style="margin:4px 0 0;display:flex;gap:6px;align-items:center">
-            <input type="hidden" name="token" value="{{ token }}"/>
-            <input type="number" name="lønn" value="{{ b.lønn or '' }}" placeholder="Årslønn (0 = lik vekt)"
-              style="width:180px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:.8rem;font-family:inherit"/>
-            <button type="submit" class="btn-kat-save" style="font-size:.78rem">Lagre lønn</button>
-          </form>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+            <form method="post" action="/admin/brukere/sett-lønn" style="margin:0;display:flex;gap:6px;align-items:center">
+              <input type="hidden" name="token" value="{{ token }}"/>
+              <input type="number" name="lønn" value="{{ b.lønn or '' }}" placeholder="Årslønn (0 = lik vekt)"
+                style="width:170px;border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:.8rem;font-family:inherit"/>
+              <button type="submit" class="btn-kat-save" style="font-size:.78rem">Lagre lønn</button>
+            </form>
+            <form method="post" action="/admin/brukere/sett-team" style="margin:0;display:flex;gap:6px;align-items:center">
+              <input type="hidden" name="token" value="{{ token }}"/>
+              <select name="team" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:.8rem;font-family:inherit;background:#fff">
+                <option value="investering" {% if b.team != 'støtte' %}selected{% endif %}>Investeringsteam</option>
+                <option value="støtte" {% if b.team == 'støtte' %}selected{% endif %}>Forretningsstøtte</option>
+              </select>
+              <button type="submit" class="btn-kat-save" style="font-size:.78rem">Lagre team</button>
+            </form>
+          </div>
         </div>
         <form method="post" action="/admin/brukere/fjern" style="margin:0">
           <input type="hidden" name="token" value="{{ token }}"/>

@@ -117,6 +117,7 @@
       <thead>
         <tr>
           <th>Person</th>
+          <th>Team</th>
           <th class="num">Årslønn</th>
           <th class="num">Andel</th>
           <th class="num">Kostnad tildelt</th>
@@ -128,6 +129,13 @@
         {% for p in beregning.personer %}
         <tr>
           <td>{{ p.navn }}</td>
+          <td>
+            {% if p.team == 'støtte' %}
+              <span style="font-size:.75rem;background:#fef3c7;color:#92400e;border-radius:99px;padding:2px 8px;font-weight:600">Støtte</span>
+            {% else %}
+              <span style="font-size:.75rem;background:#d1fae5;color:#065f46;border-radius:99px;padding:2px 8px;font-weight:600">Investering</span>
+            {% endif %}
+          </td>
           <td class="num">{% if p.lønn %}{{ "{:,.0f}".format(p.lønn).replace(",", " ") }}{% else %}<span style="color:var(--muted)">lik vekt</span>{% endif %}</td>
           <td class="num">{{ "%.2f"|format(p.andel_prosent) }} %</td>
           <td class="num">{% if not p.ingen_timer %}{{ "{:,.0f}".format(p.kostnad_person).replace(",", " ") }}{% else %}<span style="color:var(--muted)">—</span>{% endif %}</td>
@@ -135,6 +143,8 @@
           <td>
             {% if p.ingen_timer %}
               <span style="color:var(--red);font-size:.82rem">Ingen timer — ikke fordelt</span>
+            {% elif p.brukt_team_nøkkel %}
+              <span style="font-size:.75rem;background:#ede9fe;color:#5b21b6;border-radius:99px;padding:2px 8px;font-weight:600">Team-nøkkel</span>
             {% elif p.brukt_ytd %}
               <span class="ytd-badge">YTD-snitt</span>
             {% else %}
@@ -147,7 +157,8 @@
     </table>
     <div style="font-size:.78rem;color:var(--muted);margin-top:12px">
       Andel = årslønn / total lønn. Kun investeringer (ikke «Annet») inkluderes i timegrunnlaget.<br>
-      YTD-snitt brukes for de som ikke har rapportert timer denne måneden.
+      <strong>Team-nøkkel</strong>: forretningsstøtte uten investeringstimer fordeles etter teamets samlede fordelingsnøkkel.<br>
+      YTD-snitt brukes for investeringsteam uten timer denne måneden.
     </div>
   </div>
 

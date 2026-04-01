@@ -87,10 +87,12 @@ def init_db():
         cols = [r[1] for r in con.execute("PRAGMA table_info(investeringer)").fetchall()]
         if "kategori" not in cols:
             con.execute("ALTER TABLE investeringer ADD COLUMN kategori TEXT NOT NULL DEFAULT 'Annet'")
-        # Migrering: legg til lønn-kolonne på brukere
+        # Migrering: legg til lønn og team på brukere
         cols_b = [r[1] for r in con.execute("PRAGMA table_info(brukere)").fetchall()]
         if "lønn" not in cols_b:
             con.execute("ALTER TABLE brukere ADD COLUMN lønn INTEGER NOT NULL DEFAULT 0")
+        if "team" not in cols_b:
+            con.execute("ALTER TABLE brukere ADD COLUMN team TEXT NOT NULL DEFAULT 'investering'")
 
 init_db()
 
@@ -144,8 +146,8 @@ def finn_bruker(token: str):
 
 def hent_alle_brukere() -> dict:
     with db() as con:
-        rader = con.execute("SELECT token, navn, epost, lønn FROM brukere").fetchall()
-    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"]} for r in rader}
+        rader = con.execute("SELECT token, navn, epost, lønn, team FROM brukere").fetchall()
+    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"], "team": r["team"]} for r in rader}
 
 def lagre_bruker(token: str, navn: str, epost: str):
     with db() as con:
@@ -154,6 +156,10 @@ def lagre_bruker(token: str, navn: str, epost: str):
 def sett_lønn_bruker(token: str, lønn: int):
     with db() as con:
         con.execute("UPDATE brukere SET lønn=? WHERE token=?", (lønn, token))
+
+def sett_team_bruker(token: str, team: str):
+    with db() as con:
+        con.execute("UPDATE brukere SET team=? WHERE token=?", (team, token))
 
 def fjern_bruker(token: str) -> str:
     with db() as con:
@@ -400,7 +406,7 @@ def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
     inv_order = {i["navn"]: idx for idx, i in enumerate(inkl_inv)}
 
     with db() as con:
-        brukere_rader = con.execute("SELECT token, navn, lønn FROM brukere ORDER BY navn").fetchall()
+        brukere_rader = con.execute("SELECT token, navn, lønn, team FROM brukere ORDER BY navn").fetchall()
 
     # lønn=0 → telles som 1 (lik vekt)
     total_lønn = sum(max(b["lønn"] or 0, 1) for b in brukere_rader)
@@ -410,16 +416,17 @@ def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
         lønn = max(b["lønn"] or 0, 1)
         andel = lønn / total_lønn
         kostnad_person = total_kostnad * andel
+        team = b["team"] or "investering"
 
         timer = hent_timer_for_uker(b["token"], uker, inkl_navn)
         brukt_ytd = False
-        if sum(timer.values()) == 0:
+        # YTD-fallback for investeringsteam (støtte håndteres separat nedenfor)
+        if sum(timer.values()) == 0 and team == "investering":
             timer = hent_ytd_snitt(b["token"], måned, år, inkl_navn)
             brukt_ytd = bool(timer)
 
         total_timer = sum(timer.values())
 
-        # Fordel denne personens kostnad etter timefordelingen
         inv_kostnad_person: dict = {}
         if total_timer > 0:
             for inv, t in timer.items():
@@ -429,14 +436,34 @@ def beregn_fordeling(total_kostnad: float, måned: int, år: int) -> dict:
             "token": b["token"],
             "navn": b["navn"],
             "lønn": b["lønn"] or 0,
+            "team": team,
             "andel_prosent": round(andel * 100, 2),
             "kostnad_person": round(kostnad_person),
             "timer": timer,
             "total_timer": round(total_timer, 1),
             "inv_kostnad": inv_kostnad_person,
             "brukt_ytd": brukt_ytd,
+            "brukt_team_nøkkel": False,
             "ingen_timer": total_timer == 0,
         })
+
+    # Bygg team-nøkkel fra alle som har egne allokerte timer
+    inv_kr_med_timer: dict = {}
+    totalt_kr_med_timer = 0.0
+    for p in personer:
+        if p["total_timer"] > 0:
+            for inv, kr in p["inv_kostnad"].items():
+                inv_kr_med_timer[inv] = inv_kr_med_timer.get(inv, 0.0) + kr
+                totalt_kr_med_timer += kr
+
+    team_nøkkel = {inv: kr / totalt_kr_med_timer for inv, kr in inv_kr_med_timer.items()} if totalt_kr_med_timer > 0 else {}
+
+    # Støtte-ansatte uten allokerte timer → fordel etter team-nøkkel
+    for p in personer:
+        if p["total_timer"] == 0 and p["team"] == "støtte" and team_nøkkel:
+            p["inv_kostnad"] = {inv: p["kostnad_person"] * nøkkel for inv, nøkkel in team_nøkkel.items()}
+            p["ingen_timer"] = False
+            p["brukt_team_nøkkel"] = True
 
     # Summer kostnad per investering på tvers av alle personer
     inv_kostnad_total: dict = {}
@@ -639,6 +666,18 @@ async def admin_fjern_inv(request: Request):
     navn = form.get("navn", "").strip()
     lagre_investeringer([i for i in les_investeringer() if i["navn"] != navn])
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
+
+@app.post("/admin/brukere/sett-team")
+async def admin_sett_team(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    token = form.get("token", "").strip()
+    team = form.get("team", "investering").strip()
+    if team not in ("investering", "støtte"):
+        team = "investering"
+    sett_team_bruker(token, team)
+    return RedirectResponse("/admin?melding=Team+oppdatert", status_code=303)
 
 @app.post("/admin/brukere/sett-lønn")
 async def admin_sett_lønn(request: Request):
