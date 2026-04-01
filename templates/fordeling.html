@@ -214,6 +214,11 @@
           </td>
         </tr>
         {% endfor %}
+        <tr class="total-row">
+          <td colspan="4">Totalt fordelt</td>
+          <td class="num">{{ "{:,.0f}".format(beregning.totalt_fordelt).replace(",", " ") }}</td>
+          <td colspan="2"></td>
+        </tr>
       </tbody>
     </table>
     <div style="font-size:.78rem;color:var(--muted);margin-top:12px">
