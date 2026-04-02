@@ -110,20 +110,11 @@ def init_db():
                 tidspunkt TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS trivsel_status (
-                trivsel_token TEXT NOT NULL,
-                runde_id      INTEGER NOT NULL,
-                PRIMARY KEY (trivsel_token, runde_id)
+                token     TEXT NOT NULL,
+                runde_id  INTEGER NOT NULL,
+                PRIMARY KEY (token, runde_id)
             );
         """)
-        # Legg til trivsel_token på brukere hvis den ikke finnes
-        cols_t = [r[1] for r in con.execute("PRAGMA table_info(brukere)").fetchall()]
-        if "trivsel_token" not in cols_t:
-            con.execute("ALTER TABLE brukere ADD COLUMN trivsel_token TEXT")
-        # Generer trivsel_token for brukere som mangler det
-        mangler = con.execute("SELECT token FROM brukere WHERE trivsel_token IS NULL").fetchall()
-        for r in mangler:
-            con.execute("UPDATE brukere SET trivsel_token=? WHERE token=?",
-                        (secrets.token_urlsafe(16), r["token"]))
 
 init_db()
 
@@ -177,15 +168,12 @@ def finn_bruker(token: str):
 
 def hent_alle_brukere() -> dict:
     with db() as con:
-        rader = con.execute("SELECT token, navn, epost, lønn, team, trivsel_token FROM brukere").fetchall()
-    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"], "team": r["team"], "trivsel_token": r["trivsel_token"]} for r in rader}
+        rader = con.execute("SELECT token, navn, epost, lønn, team FROM brukere").fetchall()
+    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"], "team": r["team"]} for r in rader}
 
 def lagre_bruker(token: str, navn: str, epost: str):
     with db() as con:
-        existing = con.execute("SELECT trivsel_token FROM brukere WHERE token=?", (token,)).fetchone()
-        t_token = existing["trivsel_token"] if existing and existing["trivsel_token"] else secrets.token_urlsafe(16)
-        con.execute("INSERT OR REPLACE INTO brukere (token, navn, epost, trivsel_token) VALUES (?,?,?,?)",
-                    (token, navn, epost, t_token))
+        con.execute("INSERT OR REPLACE INTO brukere (token, navn, epost) VALUES (?,?,?)", (token, navn, epost))
 
 def sett_lønn_bruker(token: str, lønn: int):
     with db() as con:
@@ -885,26 +873,17 @@ def opprett_runde(år: int, måned: int) -> int:
         )
         return cur.lastrowid
 
-def finn_bruker_ved_trivsel_token(trivsel_token: str) -> dict | None:
+def har_svart_trivsel(token: str, runde_id: int) -> bool:
     with db() as con:
         r = con.execute(
-            "SELECT navn, epost FROM brukere WHERE trivsel_token=?", (trivsel_token,)
-        ).fetchone()
-    return dict(r) if r else None
-
-def har_svart_trivsel(trivsel_token: str, runde_id: int) -> bool:
-    with db() as con:
-        r = con.execute(
-            "SELECT 1 FROM trivsel_status WHERE trivsel_token=? AND runde_id=?",
-            (trivsel_token, runde_id)
+            "SELECT 1 FROM trivsel_status WHERE token=? AND runde_id=?", (token, runde_id)
         ).fetchone()
     return bool(r)
 
-def registrer_trivsel_svar(runde_id: int, trivsel_token: str, spm1: int, spm2: int) -> bool:
+def registrer_trivsel_svar(runde_id: int, token: str, spm1: int, spm2: int) -> bool:
     with db() as con:
         if con.execute(
-            "SELECT 1 FROM trivsel_status WHERE trivsel_token=? AND runde_id=?",
-            (trivsel_token, runde_id)
+            "SELECT 1 FROM trivsel_status WHERE token=? AND runde_id=?", (token, runde_id)
         ).fetchone():
             return False
         con.execute(
@@ -912,8 +891,8 @@ def registrer_trivsel_svar(runde_id: int, trivsel_token: str, spm1: int, spm2: i
             (runde_id, spm1, spm2, datetime.now().isoformat())
         )
         con.execute(
-            "INSERT OR IGNORE INTO trivsel_status (trivsel_token, runde_id) VALUES (?,?)",
-            (trivsel_token, runde_id)
+            "INSERT OR IGNORE INTO trivsel_status (token, runde_id) VALUES (?,?)",
+            (token, runde_id)
         )
     return True
 
@@ -938,10 +917,10 @@ def hent_trivsel_resultater(runde_id: int) -> dict:
         "fordeling_spm2": [v2.count(i) for i in range(1, 8)],
     }
 
-def svart_trivsel_tokens_for_runde(runde_id: int) -> set:
+def svart_tokens_for_runde(runde_id: int) -> set:
     with db() as con:
-        return {r["trivsel_token"] for r in con.execute(
-            "SELECT trivsel_token FROM trivsel_status WHERE runde_id=?", (runde_id,)
+        return {r["token"] for r in con.execute(
+            "SELECT token FROM trivsel_status WHERE runde_id=?", (runde_id,)
         ).fetchall()}
 
 
@@ -949,24 +928,24 @@ def svart_trivsel_tokens_for_runde(runde_id: int) -> set:
 async def trivsel_takk(request: Request):
     return render("trivsel_takk.html")
 
-@app.get("/trivsel/{trivsel_token}", response_class=HTMLResponse)
-async def trivsel_vis(request: Request, trivsel_token: str):
-    bruker = finn_bruker_ved_trivsel_token(trivsel_token)
+@app.get("/trivsel/{token}", response_class=HTMLResponse)
+async def trivsel_vis(request: Request, token: str):
+    bruker = finn_bruker(token)
     if not bruker:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Ugyldig lenke.</h1>", status_code=404)
     runde = aktiv_runde()
     if not runde:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px;max-width:500px'>Ingen aktiv trivselsmåling akkurat nå. Prøv igjen senere.</h1>")
-    allerede_svart = har_svart_trivsel(trivsel_token, runde["id"])
+    allerede_svart = har_svart_trivsel(token, runde["id"])
     return render("trivsel_form.html",
         bruker=bruker, runde=runde,
         allerede_svart=allerede_svart,
         måned_navn=MÅNEDS_NAVN[runde["måned"] - 1],
     )
 
-@app.post("/trivsel/{trivsel_token}", response_class=HTMLResponse)
-async def trivsel_send_inn(request: Request, trivsel_token: str):
-    bruker = finn_bruker_ved_trivsel_token(trivsel_token)
+@app.post("/trivsel/{token}", response_class=HTMLResponse)
+async def trivsel_send_inn(request: Request, token: str):
+    bruker = finn_bruker(token)
     if not bruker:
         return HTMLResponse("<h1>Ugyldig lenke</h1>", status_code=404)
     runde = aktiv_runde()
@@ -980,7 +959,7 @@ async def trivsel_send_inn(request: Request, trivsel_token: str):
             raise ValueError
     except (ValueError, TypeError):
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Vennligst velg svar på begge spørsmålene.</h1>", status_code=400)
-    registrer_trivsel_svar(runde["id"], trivsel_token, spm1, spm2)
+    registrer_trivsel_svar(runde["id"], token, spm1, spm2)
     return RedirectResponse("/trivsel/takk", status_code=303)
 
 @app.get("/admin/trivsel", response_class=HTMLResponse)
@@ -990,7 +969,7 @@ async def admin_trivsel(request: Request):
     runde = aktiv_runde()
     resultater = hent_trivsel_resultater(runde["id"]) if runde else None
     brukere = hent_alle_brukere()
-    svart = svart_trivsel_tokens_for_runde(runde["id"]) if runde else set()
+    svart = svart_tokens_for_runde(runde["id"]) if runde else set()
     return render("admin_trivsel.html",
         runde=runde, resultater=resultater,
         brukere=brukere, svart_tokens=svart,
@@ -1022,12 +1001,9 @@ async def api_trivsel_lenker(request: Request, key: Optional[str] = Query(defaul
     runde = aktiv_runde()
     if not runde:
         return JSONResponse({"error": "Ingen aktiv runde"}, status_code=404)
-    svart = svart_trivsel_tokens_for_runde(runde["id"])
+    brukere = hent_alle_brukere()
+    svart = svart_tokens_for_runde(runde["id"])
     base_url = str(request.base_url).rstrip("/")
-    with db() as con:
-        rader = con.execute(
-            "SELECT navn, epost, trivsel_token FROM brukere ORDER BY navn"
-        ).fetchall()
     return JSONResponse({
         "runde": {
             "år": runde["år"],
@@ -1036,12 +1012,12 @@ async def api_trivsel_lenker(request: Request, key: Optional[str] = Query(defaul
         },
         "lenker": [
             {
-                "navn": r["navn"],
-                "epost": r["epost"],
-                "url": f"{base_url}/trivsel/{r['trivsel_token']}",
-                "har_svart": r["trivsel_token"] in svart,
+                "navn": b["navn"],
+                "epost": b["epost"],
+                "url": f"{base_url}/trivsel/{token}",
+                "har_svart": token in svart,
             }
-            for r in rader if r["trivsel_token"]
+            for token, b in brukere.items()
         ],
     })
 
