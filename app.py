@@ -709,6 +709,22 @@ async def admin_legg_til_bruker(request: Request):
     epost = form.get("epost", "").strip()
     if token and navn and epost:
         lagre_bruker(token, navn, epost)
+        # Auto-opprett trivsel-token for alle åpne utsendelser inneværende år
+        nå = datetime.now()
+        with db() as con:
+            åpne = con.execute(
+                "SELECT id FROM trivsel_utsendelser WHERE år=? AND stengt=0", (nå.year,)
+            ).fetchall()
+            for u in åpne:
+                eks = con.execute(
+                    "SELECT 1 FROM trivsel_tokens WHERE utsendelse_id=? AND bruker_token=?",
+                    (u["id"], token)
+                ).fetchone()
+                if not eks:
+                    con.execute(
+                        "INSERT INTO trivsel_tokens (survey_token, utsendelse_id, bruker_token) VALUES (?,?,?)",
+                        (secrets.token_urlsafe(24), u["id"], token)
+                    )
     return RedirectResponse(f"/admin?melding={navn}+lagt+til", status_code=303)
 
 @app.post("/admin/brukere/fjern")
@@ -940,6 +956,14 @@ def trivsel_hent_resultater(utsendelse_id: int) -> dict:
         "dist_samarbeid":  dist_s,
     }
 
+@app.get("/trivsel/takk", response_class=HTMLResponse)
+async def trivsel_takk_get():
+    return render("trivsel_takk.html")
+
+@app.get("/trivsel/allerede-svart", response_class=HTMLResponse)
+async def trivsel_allerede_svart_get():
+    return render("trivsel_allerede_svart.html", måned="", år="")
+
 @app.get("/trivsel/{survey_token}", response_class=HTMLResponse)
 async def trivsel_vis_skjema(survey_token: str):
     with db() as con:
@@ -959,7 +983,8 @@ async def trivsel_vis_skjema(survey_token: str):
         return render("trivsel_allerede_svart.html", måned=måned_navn, år=row["år"])
     return render("trivsel_svar.html",
                   survey_token=survey_token,
-                  måned=måned_navn, år=row["år"])
+                  måned=måned_navn, år=row["år"],
+                  forhåndsvis=False)
 
 @app.post("/trivsel/{survey_token}")
 async def trivsel_send_svar(survey_token: str, request: Request):
@@ -989,14 +1014,6 @@ async def trivsel_send_svar(survey_token: str, request: Request):
             (tok["utsendelse_id"], trivsel_score, samarbeid_score, datetime.now().isoformat())
         )
     return RedirectResponse("/trivsel/takk", status_code=303)
-
-@app.get("/trivsel/takk", response_class=HTMLResponse)
-async def trivsel_takk():
-    return render("trivsel_takk.html")
-
-@app.get("/trivsel/allerede-svart", response_class=HTMLResponse)
-async def trivsel_allerede_svart():
-    return render("trivsel_allerede_svart.html", måned="", år="")
 
 @app.get("/admin/trivsel", response_class=HTMLResponse)
 async def admin_trivsel(request: Request):
@@ -1079,6 +1096,45 @@ async def admin_trivsel_steng(uid: int, request: Request):
     with db() as con:
         con.execute("UPDATE trivsel_utsendelser SET stengt=1 WHERE id=?", (uid,))
     return RedirectResponse("/admin/trivsel?melding=Periode+stengt", status_code=303)
+
+@app.get("/admin/trivsel/forhåndsvis", response_class=HTMLResponse)
+async def admin_trivsel_preview(request: Request):
+    """Vis skjemaet slik brukerne ser det — uten å registrere svar."""
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    nå = datetime.now()
+    return render("trivsel_svar.html",
+                  survey_token="__PREVIEW__",
+                  måned=MÅNEDS_NAVN[nå.month - 1],
+                  år=nå.year,
+                  forhåndsvis=True)
+
+@app.post("/admin/trivsel/testdata/{uid}")
+async def admin_trivsel_testdata(uid: int, request: Request):
+    """Generer 5 tilfeldige testsvar for en utsendelse (vises som demo-data)."""
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    import random as _r
+    with db() as con:
+        u = con.execute("SELECT id, måned, år FROM trivsel_utsendelser WHERE id=?", (uid,)).fetchone()
+        if not u:
+            return RedirectResponse("/admin/trivsel", status_code=303)
+        # Hent tokens som ikke er brukt
+        ubrukte = con.execute(
+            "SELECT survey_token, bruker_token FROM trivsel_tokens WHERE utsendelse_id=? AND brukt=0",
+            (uid,)
+        ).fetchall()
+        antall = min(5, len(ubrukte))
+        valgte = _r.sample(list(ubrukte), antall)
+        for t in valgte:
+            trivsel_score   = _r.randint(4, 7)
+            samarbeid_score = _r.randint(4, 7)
+            con.execute("UPDATE trivsel_tokens SET brukt=1 WHERE survey_token=?", (t["survey_token"],))
+            con.execute(
+                "INSERT INTO trivsel_svar (utsendelse_id, trivsel, samarbeid, innsendt) VALUES (?,?,?,?)",
+                (uid, trivsel_score, samarbeid_score, datetime.now().isoformat())
+            )
+    return RedirectResponse(f"/admin/trivsel?melding={antall}+testsvar+lagt+inn", status_code=303)
 
 @app.get("/admin/trivsel/lenker/{år}/{måned}", response_class=HTMLResponse)
 async def admin_trivsel_lenker(år: int, måned: int, request: Request):

@@ -6,54 +6,136 @@
   <title>Trivsel lenker — {{ måned }} {{ år }}</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
-    :root { --blue:#1e3a5f; --sea:#0d9488; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; }
+    :root { --blue:#1e3a5f; --sea:#0d9488; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; --green:#16a34a; }
     * { box-sizing:border-box; margin:0; padding:0; }
     body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
-    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .hdr-left { display:flex; flex-direction:column; }
     .hdr-logo { font-size:1.1rem; font-weight:700; }
     .hdr-logo span { color:#93c5fd; }
-    .wrap { max-width:700px; margin:0 auto; padding:28px 16px; display:flex; flex-direction:column; gap:20px; }
-    .card { background:var(--card); border-radius:var(--radius); border:1px solid var(--border); padding:24px; }
-    .card h2 { font-size:1rem; font-weight:600; margin-bottom:16px; color:var(--blue); }
-    .lenke-rad { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border-radius:8px; margin-bottom:8px; }
-    .navn { font-weight:600; font-size:.9rem; min-width:140px; }
-    .url { font-family:monospace; font-size:.75rem; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .badge { font-size:.72rem; font-weight:700; padding:2px 10px; border-radius:99px; white-space:nowrap; }
-    .badge.svart { background:#d1fae5; color:#065f46; }
-    .badge.ikke   { background:#fef3c7; color:#92400e; }
-    .btn-copy { background:var(--sea); color:#fff; border:none; border-radius:6px; padding:5px 12px; font-size:.78rem; font-weight:600; cursor:pointer; white-space:nowrap; }
-    .btn-copy:hover { background:#0f766e; }
-    .btn-copy.kopiert { background:#16a34a; }
+    .hdr-sub { font-size:.78rem; color:#93c5fd; margin-top:2px; }
+    .hdr-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
     .back { color:#93c5fd; font-size:.85rem; text-decoration:none; }
     .back:hover { color:#fff; }
-    .stat { display:inline-block; background:#d1fae5; color:#065f46; border-radius:99px; padding:4px 14px; font-size:.8rem; font-weight:700; margin-bottom:16px; }
+    .btn-kopier-alle { background:var(--sea); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:.82rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-kopier-alle:hover { background:#0f766e; }
+    .wrap { max-width:700px; margin:0 auto; padding:28px 16px; display:flex; flex-direction:column; gap:20px; }
+    .card { background:var(--card); border-radius:var(--radius); border:1px solid var(--border); padding:24px; }
+    .card h2 { font-size:1rem; font-weight:600; margin-bottom:4px; color:var(--blue); }
+    .card-sub { font-size:.8rem; color:var(--muted); margin-bottom:16px; }
+
+    /* Progresjonsoversikt */
+    .progress-wrap { background:var(--bg); border-radius:10px; padding:14px 16px; margin-bottom:16px; display:flex; align-items:center; gap:16px; }
+    .progress-tall { font-size:2rem; font-weight:800; color:var(--sea); line-height:1; }
+    .progress-info { flex:1; }
+    .progress-label { font-size:.85rem; font-weight:600; color:var(--blue); }
+    .progress-bar { width:100%; height:8px; background:#e2e8f0; border-radius:99px; overflow:hidden; margin-top:6px; }
+    .progress-fill { height:100%; background:var(--sea); border-radius:99px; }
+    .progress-pst { font-size:.78rem; color:var(--muted); margin-top:4px; }
+
+    /* Person-rad */
+    .person-rad { display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--bg); border-radius:8px; margin-bottom:8px; }
+    .person-rad.svart { border-left:3px solid var(--green); }
+    .person-rad.ikke { border-left:3px solid #fbbf24; }
+    .person-ikon { font-size:1.1rem; width:28px; text-align:center; flex-shrink:0; }
+    .person-info { flex:1; min-width:0; }
+    .person-navn { font-weight:600; font-size:.9rem; }
+    .person-epost { font-size:.75rem; color:var(--muted); margin-top:1px; }
+    .person-url { font-family:monospace; font-size:.7rem; color:#94a3b8; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .badge { font-size:.7rem; font-weight:700; padding:2px 10px; border-radius:99px; white-space:nowrap; flex-shrink:0; }
+    .badge.svart { background:#d1fae5; color:#065f46; }
+    .badge.ikke   { background:#fef3c7; color:#92400e; }
+    .knapper { display:flex; gap:6px; flex-shrink:0; }
+    .btn-copy { background:var(--sea); color:#fff; border:none; border-radius:6px; padding:5px 11px; font-size:.76rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-copy:hover { background:#0f766e; }
+    .btn-copy.kopiert { background:var(--green); }
+    .btn-mail { background:#fff; border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 11px; font-size:.76rem; font-weight:600; text-decoration:none; white-space:nowrap; }
+    .btn-mail:hover { background:var(--bg); }
+
+    /* Ikke svart-seksjon */
+    .seksjons-header { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); padding:8px 0 6px; border-bottom:1px solid var(--border); margin-bottom:10px; margin-top:16px; }
   </style>
 </head>
 <body>
 <header>
-  <div class="hdr-logo">Kverva <span>Trivsel</span> — {{ måned }} {{ år }}</div>
-  <a href="/admin/trivsel" class="back">← Tilbake</a>
+  <div class="hdr-left">
+    <div class="hdr-logo">Kverva <span>Trivsel</span></div>
+    <div class="hdr-sub">{{ måned }} {{ år }}</div>
+  </div>
+  <div class="hdr-actions">
+    <button class="btn-kopier-alle" onclick="kopierAlle()">Kopier alle lenker</button>
+    <a href="/admin/trivsel" class="back">← Tilbake</a>
+  </div>
 </header>
+
 <div class="wrap">
   <div class="card">
-    <div class="stat">{{ svart }} / {{ lenker|length }} har svart</div>
-    <h2>Personlige lenker</h2>
-    {% for l in lenker %}
-    <div class="lenke-rad">
-      <div class="navn">{{ l.navn }}</div>
-      <div class="url">{{ l.link }}</div>
-      <span class="badge {{ 'svart' if l.brukt else 'ikke' }}">{{ 'Svart' if l.brukt else 'Ikke svart' }}</span>
-      <button class="btn-copy" onclick="kopier(this, '{{ l.link }}')">Kopier</button>
+    <!-- Progresjon -->
+    <div class="progress-wrap">
+      <div class="progress-tall">{{ svart }}/{{ lenker|length }}</div>
+      <div class="progress-info">
+        <div class="progress-label">har svart</div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:{{ (svart / lenker|length * 100)|round|int if lenker|length else 0 }}%"></div>
+        </div>
+        <div class="progress-pst">{{ (svart / lenker|length * 100)|round|int if lenker|length else 0 }}% svarprosent</div>
+      </div>
+    </div>
+
+    <!-- Ikke svart -->
+    {% set ikke_svart = lenker | selectattr("brukt", "equalto", false) | list %}
+    {% if ikke_svart %}
+    <div class="seksjons-header">Venter på svar ({{ ikke_svart|length }})</div>
+    {% for l in ikke_svart %}
+    <div class="person-rad ikke" data-url="{{ l.link }}">
+      <div class="person-ikon">⏳</div>
+      <div class="person-info">
+        <div class="person-navn">{{ l.navn }}</div>
+        <div class="person-epost">{{ l.epost }}</div>
+        <div class="person-url">{{ l.link }}</div>
+      </div>
+      <span class="badge ikke">Ikke svart</span>
+      <div class="knapper">
+        <button class="btn-copy" onclick="kopier(this, '{{ l.link }}')">Kopier</button>
+        <a class="btn-mail" href="mailto:{{ l.epost }}?subject=Trivselsmåling {{ måned }} {{ år }}&body=Hei {{ l.navn }},%0A%0AVi gjennomfører månedlig trivselsmåling. Det tar under ett minutt:%0A%0A{{ l.link }}%0A%0ATakk!">E-post</a>
+      </div>
     </div>
     {% endfor %}
+    {% endif %}
+
+    <!-- Har svart -->
+    {% set har_svart = lenker | selectattr("brukt") | list %}
+    {% if har_svart %}
+    <div class="seksjons-header">Har svart ({{ har_svart|length }})</div>
+    {% for l in har_svart %}
+    <div class="person-rad svart">
+      <div class="person-ikon">✅</div>
+      <div class="person-info">
+        <div class="person-navn">{{ l.navn }}</div>
+        <div class="person-epost">{{ l.epost }}</div>
+      </div>
+      <span class="badge svart">Svart</span>
+    </div>
+    {% endfor %}
+    {% endif %}
   </div>
 </div>
+
 <script>
 function kopier(btn, url) {
   navigator.clipboard.writeText(url).then(() => {
     btn.textContent = 'Kopiert!';
     btn.classList.add('kopiert');
     setTimeout(() => { btn.textContent = 'Kopier'; btn.classList.remove('kopiert'); }, 2000);
+  });
+}
+function kopierAlle() {
+  const urls = [...document.querySelectorAll('.person-rad[data-url]')]
+    .map(r => r.dataset.url).join('\n');
+  navigator.clipboard.writeText(urls).then(() => {
+    const btn = document.querySelector('.btn-kopier-alle');
+    btn.textContent = 'Kopiert!';
+    setTimeout(() => { btn.textContent = 'Kopier alle lenker'; }, 2500);
   });
 }
 </script>
