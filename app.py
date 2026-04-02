@@ -1136,23 +1136,21 @@ async def admin_trivsel_testdata(uid: int, request: Request):
             )
     return RedirectResponse(f"/admin/trivsel?melding={antall}+testsvar+lagt+inn", status_code=303)
 
-@app.get("/admin/trivsel/lenker/{år}/{måned}", response_class=HTMLResponse)
-async def admin_trivsel_lenker(år: int, måned: int, request: Request):
+@app.get("/admin/trivsel/lenker/{year}/{month}", response_class=HTMLResponse)
+async def admin_trivsel_lenker(year: int, month: int, request: Request):
     if not er_innlogget(request):
         return RedirectResponse("/admin", status_code=303)
+    trivsel_opprett_utsendelse(year, month)  # idempotent — sikrer tokens finnes
     with db() as con:
         u = con.execute(
-            "SELECT id FROM trivsel_utsendelser WHERE år=? AND måned=?", (år, måned)
+            "SELECT id FROM trivsel_utsendelser WHERE år=? AND måned=?", (year, month)
         ).fetchone()
-        if not u:
-            from fastapi import HTTPException as _H
-            raise _H(404, "Utsendelse ikke funnet")
         rader = con.execute("""
             SELECT b.navn, b.epost, tt.survey_token, tt.brukt
             FROM trivsel_tokens tt
             JOIN brukere b ON b.token = tt.bruker_token
             WHERE tt.utsendelse_id = ?
-            ORDER BY b.navn
+            ORDER BY tt.brukt ASC, b.navn
         """, (u["id"],)).fetchall()
     base = str(request.base_url).rstrip("/")
     lenker = [
@@ -1167,18 +1165,18 @@ async def admin_trivsel_lenker(år: int, måned: int, request: Request):
     svart = sum(1 for l in lenker if l["brukt"])
     return render("trivsel_lenker.html",
                   lenker=lenker,
-                  måned=MÅNEDS_NAVN[måned - 1],
-                  år=år,
+                  måned=MÅNEDS_NAVN[month - 1],
+                  år=year,
                   svart=svart)
 
-@app.get("/api/trivsel/lenker/{år}/{måned}")
-async def api_trivsel_lenker(år: int, måned: int, request: Request):
+@app.get("/api/trivsel/lenker/{year}/{month}")
+async def api_trivsel_lenker(year: int, month: int, request: Request):
     """Power Automate: hent survey-lenker for utsending via e-post."""
     key = request.query_params.get("api_key") or request.headers.get("x-api-key", "")
     if not (EXPORT_API_KEY and secrets.compare_digest(key, EXPORT_API_KEY)):
         from fastapi import HTTPException as _H
         raise _H(401, "Ugyldig API-nøkkel")
-    _, tokens = trivsel_opprett_utsendelse(år, måned)
+    _, tokens = trivsel_opprett_utsendelse(year, month)
     base = str(request.base_url).rstrip("/")
     return JSONResponse([
         {"navn": t["navn"], "epost": t["epost"], "link": f"{base}/trivsel/{t['survey_token']}"}
