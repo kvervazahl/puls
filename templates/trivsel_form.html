@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kverva — Trivselsmåling {{ måned_navn }} {{ runde.år }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --blue:#1e3a5f; --accent:#4f8ef7; --green:#16a34a; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:60px; }
+    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .hdr-logo { font-size:1.1rem; font-weight:700; letter-spacing:.04em; }
+    .hdr-logo span { color:#93c5fd; }
+    .hdr-sub { font-size:.78rem; color:#93c5fd; margin-top:2px; }
+    .hdr-badge { background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.25); border-radius:99px; padding:6px 16px; font-size:.85rem; font-weight:600; }
+    .wrap { max-width:540px; margin:0 auto; padding:32px 16px; }
+
+    .intro { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; margin-bottom:20px; }
+    .intro h2 { font-size:1.15rem; font-weight:700; margin-bottom:6px; }
+    .intro p { font-size:.875rem; color:var(--muted); line-height:1.6; }
+    .anonym-badge { display:inline-flex; align-items:center; gap:6px; margin-top:12px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:99px; padding:5px 14px; font-size:.78rem; font-weight:600; color:var(--green); }
+
+    .sporsmal { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:22px 24px; margin-bottom:16px; }
+    .spm-nr { font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:8px; }
+    .spm-tekst { font-size:1rem; font-weight:600; margin-bottom:20px; line-height:1.4; }
+
+    .skala { display:flex; flex-direction:column; gap:8px; }
+    .skala-labels { display:flex; justify-content:space-between; font-size:.72rem; color:var(--muted); padding:0 4px; }
+    .skala-buttons { display:flex; gap:6px; }
+    .skala-btn { flex:1; position:relative; }
+    .skala-btn input[type=radio] { position:absolute; opacity:0; width:0; height:0; }
+    .skala-btn label {
+      display:flex; align-items:center; justify-content:center;
+      height:44px; border-radius:10px; border:2px solid var(--border);
+      background:var(--bg); cursor:pointer; font-weight:700; font-size:.95rem;
+      transition:all .14s; color:var(--muted); user-select:none;
+    }
+    .skala-btn input:checked + label {
+      background:var(--blue); border-color:var(--blue); color:#fff;
+      box-shadow:0 2px 8px rgba(30,58,95,.25);
+    }
+    .skala-btn label:hover { border-color:var(--accent); color:var(--accent); }
+    .skala-btn input:checked + label:hover { background:var(--blue); color:#fff; }
+
+    .submit-btn {
+      width:100%; padding:15px; border-radius:var(--radius);
+      background:var(--blue); color:#fff; border:none;
+      font-family:inherit; font-size:1rem; font-weight:700;
+      cursor:pointer; transition:background .14s; margin-top:4px;
+    }
+    .submit-btn:hover { background:#162d4a; }
+    .submit-btn:disabled { background:#94a3b8; cursor:not-allowed; }
+
+    .allerede-svart { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:var(--radius); padding:28px 24px; text-align:center; }
+    .allerede-svart .icon { font-size:2rem; margin-bottom:10px; }
+    .allerede-svart h2 { color:var(--green); font-size:1.1rem; margin-bottom:6px; }
+    .allerede-svart p { font-size:.875rem; color:var(--muted); }
+
+    .footer { text-align:center; margin-top:28px; font-size:.75rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="hdr-logo">KVERVA <span>○</span> TRIVSEL</div>
+    <div class="hdr-sub">Månedlig medarbeiderundersøkelse</div>
+  </div>
+  <div class="hdr-badge">{{ måned_navn }} {{ runde.år }}</div>
+</header>
+
+<div class="wrap">
+
+{% if allerede_svart %}
+<div class="allerede-svart">
+  <div class="icon">✅</div>
+  <h2>Du har allerede svart denne måneden</h2>
+  <p>Takk for din tilbakemelding for {{ måned_navn }} {{ runde.år }}.<br>Vi setter stor pris på det!</p>
+</div>
+
+{% else %}
+<div class="intro">
+  <h2>Hei, {{ bruker.navn }}! 👋</h2>
+  <p>To raske spørsmål om hvordan du har det i jobben. Det tar under ett minutt.</p>
+  <div class="anonym-badge">🔒 Svarene dine er anonyme</div>
+</div>
+
+<form method="post" id="trivsel-form">
+  <div class="sporsmal">
+    <div class="spm-nr">Spørsmål 1 av 2</div>
+    <div class="spm-tekst">Jeg synes vi samarbeider godt i Kverva</div>
+    <div class="skala">
+      <div class="skala-buttons">
+        {% for i in range(1, 8) %}
+        <div class="skala-btn">
+          <input type="radio" name="spm1" id="spm1_{{ i }}" value="{{ i }}" required>
+          <label for="spm1_{{ i }}">{{ i }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="skala-labels">
+        <span>Helt uenig</span>
+        <span>Helt enig</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sporsmal">
+    <div class="spm-nr">Spørsmål 2 av 2</div>
+    <div class="spm-tekst">Jeg er motivert og engasjert i mitt arbeid</div>
+    <div class="skala">
+      <div class="skala-buttons">
+        {% for i in range(1, 8) %}
+        <div class="skala-btn">
+          <input type="radio" name="spm2" id="spm2_{{ i }}" value="{{ i }}" required>
+          <label for="spm2_{{ i }}">{{ i }}</label>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="skala-labels">
+        <span>Helt uenig</span>
+        <span>Helt enig</span>
+      </div>
+    </div>
+  </div>
+
+  <button type="submit" class="submit-btn" id="send-btn" disabled>Send inn svar</button>
+</form>
+{% endif %}
+
+  <div class="footer">Kverva AS · Trivselsmåling · Svarene lagres anonymt</div>
+</div>
+
+<script>
+const form = document.getElementById('trivsel-form');
+const btn  = document.getElementById('send-btn');
+if (form) {
+  form.addEventListener('change', () => {
+    const spm1 = form.querySelector('input[name="spm1"]:checked');
+    const spm2 = form.querySelector('input[name="spm2"]:checked');
+    btn.disabled = !(spm1 && spm2);
+  });
+  form.addEventListener('submit', () => {
+    btn.disabled = true;
+    btn.textContent = 'Sender…';
+  });
+}
+</script>
+</body>
+</html>

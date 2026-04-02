@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trivsel — Admin</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --blue:#1e3a5f; --accent:#4f8ef7; --green:#16a34a; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); padding-bottom:60px; }
+    header { background:var(--blue); color:#fff; padding:18px 28px; display:flex; align-items:center; justify-content:space-between; }
+    .hdr-logo { font-size:1rem; font-weight:700; letter-spacing:.04em; }
+    .hdr-logo span { color:#93c5fd; }
+    .nav-links { display:flex; gap:12px; }
+    .nav-link { color:#93c5fd; text-decoration:none; font-size:.82rem; font-weight:600; padding:5px 12px; border:1px solid rgba(147,197,253,.3); border-radius:8px; }
+    .nav-link:hover { background:rgba(255,255,255,.1); }
+    .wrap { max-width:860px; margin:0 auto; padding:28px 20px; }
+    h1 { font-size:1.3rem; font-weight:700; margin-bottom:4px; }
+    .page-sub { font-size:.85rem; color:var(--muted); margin-bottom:24px; }
+
+    .melding { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:12px 18px; color:var(--green); font-size:.88rem; font-weight:600; margin-bottom:16px; }
+
+    .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+    @media(max-width:600px){ .grid-2{ grid-template-columns:1fr; } }
+
+    .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; }
+    .card-title { font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:14px; }
+
+    .stat-big { font-size:2.4rem; font-weight:800; color:var(--blue); }
+    .stat-sub { font-size:.82rem; color:var(--muted); margin-top:4px; }
+
+    .progress-bar { height:10px; border-radius:99px; background:var(--border); margin:10px 0; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:99px; background:var(--green); transition:width .4s; }
+
+    .snitt-row { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+    .snitt-label { font-size:.82rem; color:var(--muted); width:260px; flex-shrink:0; }
+    .snitt-val { font-size:1.6rem; font-weight:800; color:var(--blue); width:48px; text-align:right; }
+    .snitt-bar-wrap { flex:1; }
+    .snitt-bar { height:14px; border-radius:99px; background:var(--border); overflow:hidden; }
+    .snitt-fill { height:100%; border-radius:99px; background:var(--accent); }
+
+    .ny-runde-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; margin-bottom:20px; }
+    .form-row { display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:14px; }
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group label { font-size:.78rem; font-weight:600; color:var(--muted); }
+    select, .btn { padding:9px 14px; border-radius:10px; border:1px solid var(--border); font-family:inherit; font-size:.88rem; }
+    select { background:var(--bg); color:var(--text); cursor:pointer; }
+    .btn { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:700; cursor:pointer; }
+    .btn:hover { background:#162d4a; }
+    .btn-sm { padding:5px 12px; font-size:.78rem; border-radius:7px; }
+
+    .brukere-liste { margin-top:4px; }
+    .bruker-rad { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--border); font-size:.85rem; }
+    .bruker-rad:last-child { border-bottom:none; }
+    .bruker-navn { font-weight:600; }
+    .bruker-epost { color:var(--muted); font-size:.78rem; }
+    .status-pill { padding:3px 12px; border-radius:99px; font-size:.72rem; font-weight:700; }
+    .status-ok  { background:#f0fdf4; color:var(--green); border:1px solid #bbf7d0; }
+    .status-nei { background:#fff7ed; color:#c2410c; border:1px solid #fed7aa; }
+
+    .lenke-boks { display:flex; align-items:center; gap:8px; margin-top:4px; }
+    .lenke-input { flex:1; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--muted); font-size:.75rem; font-family:monospace; }
+    .kopier-btn { padding:5px 12px; border-radius:8px; background:var(--bg); border:1px solid var(--border); font-size:.72rem; font-weight:600; cursor:pointer; color:var(--text); }
+    .kopier-btn:hover { background:var(--border); }
+
+    .chart-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+    @media(max-width:600px){ .chart-row{ grid-template-columns:1fr; } }
+    .chart-inner { max-height:200px; }
+
+    .ingen-runde { background:#fffbeb; border:1px solid #fcd34d; border-radius:var(--radius); padding:24px; text-align:center; color:#92400e; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="hdr-logo">KVERVA <span>○</span> TRIVSEL <span style="opacity:.5;margin:0 8px">|</span> <span style="font-weight:400;font-size:.88rem">Admin</span></div>
+  <div class="nav-links">
+    <a class="nav-link" href="/admin">← Tilbake til admin</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <h1>Trivselsmålinger</h1>
+  <div class="page-sub">Månedlig anonym medarbeiderundersøkelse</div>
+
+  {% if melding %}
+  <div class="melding">✓ {{ melding }}</div>
+  {% endif %}
+
+  <!-- Ny runde -->
+  <div class="ny-runde-card">
+    <div class="card-title">Start ny måling</div>
+    <form method="post" action="/admin/trivsel/ny-runde" class="form-row">
+      <div class="form-group">
+        <label>Måned</label>
+        <select name="måned">
+          {% for navn in måneds_navn %}
+          {% set nr = loop.index %}
+          <option value="{{ nr }}" {% if nr == måned_nå %}selected{% endif %}>{{ navn }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>År</label>
+        <select name="år">
+          {% for y in [år_nå - 1, år_nå, år_nå + 1] %}
+          <option value="{{ y }}" {% if y == år_nå %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn">▶ Start runde</button>
+    </form>
+    <p style="font-size:.75rem;color:var(--muted);margin-top:10px">Starter en ny runde og deaktiverer eventuell eksisterende aktiv runde.</p>
+  </div>
+
+  {% if not runde %}
+  <div class="ingen-runde">
+    <div style="font-size:1.5rem;margin-bottom:8px">📋</div>
+    <strong>Ingen aktiv runde</strong><br>
+    <span style="font-size:.85rem">Start en ny runde ovenfor for å åpne for svar.</span>
+  </div>
+
+  {% else %}
+
+  <!-- Status -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Aktiv runde</div>
+      <div class="stat-big">{{ måneds_navn[runde.måned - 1] }} {{ runde.år }}</div>
+      <div class="stat-sub">Startet {{ runde.opprettet[:10] }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Svarprosent</div>
+      {% if resultater %}
+      <div class="stat-big">{{ resultater.antall_svar }}<span style="font-size:1.2rem;font-weight:400;color:var(--muted)"> / {{ resultater.antall_brukere }}</span></div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width:{{ (resultater.antall_svar / resultater.antall_brukere * 100) | int if resultater.antall_brukere else 0 }}%"></div>
+      </div>
+      <div class="stat-sub">{{ (resultater.antall_svar / resultater.antall_brukere * 100) | int if resultater.antall_brukere else 0 }}% har svart</div>
+      {% else %}
+      <div class="stat-big" style="color:var(--muted)">—</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if resultater and resultater.antall_svar > 0 %}
+  <!-- Resultater -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">Resultater — snittscorer (1–7)</div>
+    <div class="snitt-row" style="margin-top:8px">
+      <div class="snitt-label">Samarbeid i Kverva</div>
+      <div class="snitt-val">{{ resultater.snitt_spm1 }}</div>
+      <div class="snitt-bar-wrap">
+        <div class="snitt-bar"><div class="snitt-fill" style="width:{{ (resultater.snitt_spm1 / 7 * 100) | int }}%"></div></div>
+      </div>
+    </div>
+    <div class="snitt-row">
+      <div class="snitt-label">Motivasjon og engasjement</div>
+      <div class="snitt-val">{{ resultater.snitt_spm2 }}</div>
+      <div class="snitt-bar-wrap">
+        <div class="snitt-bar"><div class="snitt-fill" style="width:{{ (resultater.snitt_spm2 / 7 * 100) | int }}%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <div class="card-title">Fordeling — Samarbeid</div>
+      <div class="chart-inner"><canvas id="chart1"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Fordeling — Motivasjon</div>
+      <div class="chart-inner"><canvas id="chart2"></canvas></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Ansatte og lenker -->
+  <div class="card">
+    <div class="card-title">Ansatte — status og lenker</div>
+    <div class="brukere-liste">
+      {% for token, b in brukere.items() %}
+      <div class="bruker-rad">
+        <div>
+          <div class="bruker-navn">{{ b.navn }}</div>
+          <div class="bruker-epost">{{ b.epost }}</div>
+          <div class="lenke-boks">
+            <input class="lenke-input" readonly value="https://puls-kverva.azurewebsites.net/trivsel/{{ token }}" id="link-{{ token }}">
+            <button class="kopier-btn" onclick="kopier('{{ token }}')">Kopier</button>
+          </div>
+        </div>
+        <div>
+          {% if token in svart_tokens %}
+          <span class="status-pill status-ok">✓ Svart</span>
+          {% else %}
+          <span class="status-pill status-nei">Ikke svart</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+function kopier(token) {
+  const el = document.getElementById('link-' + token);
+  navigator.clipboard.writeText(el.value).then(() => {
+    const btn = el.nextElementSibling;
+    btn.textContent = '✓ Kopiert';
+    setTimeout(() => btn.textContent = 'Kopier', 2000);
+  });
+}
+
+{% if resultater and resultater.antall_svar > 0 %}
+const ford1 = {{ resultater.fordeling_spm1 | tojson }};
+const ford2 = {{ resultater.fordeling_spm2 | tojson }};
+const labels = ['1','2','3','4','5','6','7'];
+const barCfg = (data, color) => ({
+  type: 'bar',
+  data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 5 }] },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { beginAtZero: true, ticks: { stepSize: 1 } },
+      x: { grid: { display: false } }
+    }
+  }
+});
+new Chart(document.getElementById('chart1'), barCfg(ford1, '#4f8ef7'));
+new Chart(document.getElementById('chart2'), barCfg(ford2, '#16a34a'));
+{% endif %}
+</script>
+</body>
+</html>
