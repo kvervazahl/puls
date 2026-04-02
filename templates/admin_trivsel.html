@@ -77,11 +77,11 @@
 
   <!-- NY UTSENDELSE -->
   <div class="card">
-    <h2>Start ny månedsrunde</h2>
-    <form method="post" id="ny-form" class="ny-form">
+    <h2>Start eller åpne en runde</h2>
+    <form method="post" action="/admin/trivsel/start" class="ny-form">
       <div>
         <label>Måned</label>
-        <select name="måned" id="sel-måned">
+        <select name="måned">
           {% for navn in månednavn %}
           <option value="{{ loop.index }}" {% if loop.index == default_måned %}selected{% endif %}>{{ navn }}</option>
           {% endfor %}
@@ -89,11 +89,11 @@
       </div>
       <div>
         <label>År</label>
-        <input type="number" name="år" id="inp-år" value="{{ default_år }}" min="2024" max="2035" style="width:90px"/>
+        <input type="number" name="år" value="{{ default_år }}" min="2024" max="2035" style="width:90px"/>
       </div>
-      <button type="submit" class="btn-add" onclick="settAction()">Start runde → vis lenker</button>
+      <button type="submit" class="btn-add">Vis lenker →</button>
     </form>
-    <p style="font-size:.78rem;color:var(--muted);margin-top:10px">Lenker er personlige og engangsbruk. Eksisterende runde gjenbrukes (idempotent).</p>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:10px">Inneværende år opprettes automatisk. Bruk denne for andre år eller for å hente lenker.</p>
   </div>
 
   <!-- HISTORIKK -->
@@ -144,13 +144,12 @@
 </div>
 
 <script>
-function settAction() {
-  const m = document.getElementById('sel-måned').value;
-  const å = document.getElementById('inp-år').value;
-  document.getElementById('ny-form').action = `/admin/trivsel/utsendelse/${å}/${m}`;
+function kopier(btn, url) {
+  navigator.clipboard.writeText(url).then(() => {
+    btn.textContent = 'Kopiert!';
+    setTimeout(() => { btn.textContent = 'Kopier'; }, 2000);
+  });
 }
-// Set on load so user can just click without changing
-document.addEventListener('DOMContentLoaded', settAction);
 </script>
 </body>
 </html>

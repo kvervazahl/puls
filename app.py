@@ -116,6 +116,19 @@ def init_db():
             con.execute("ALTER TABLE brukere ADD COLUMN lønn INTEGER NOT NULL DEFAULT 0")
         if "team" not in cols_b:
             con.execute("ALTER TABLE brukere ADD COLUMN team TEXT NOT NULL DEFAULT 'investering'")
+        # Migrering: trivsel_svar fra gammelt skjema (runde_id/spm1/spm2) til nytt
+        cols_ts = [r[1] for r in con.execute("PRAGMA table_info(trivsel_svar)").fetchall()]
+        if cols_ts and "utsendelse_id" not in cols_ts:
+            con.execute("DROP TABLE trivsel_svar")
+            con.execute("""
+                CREATE TABLE trivsel_svar (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    utsendelse_id INTEGER NOT NULL,
+                    trivsel       INTEGER NOT NULL,
+                    samarbeid     INTEGER NOT NULL,
+                    innsendt      TEXT NOT NULL
+                )
+            """)
 
 init_db()
 
@@ -990,6 +1003,25 @@ async def admin_trivsel(request: Request):
     if not er_innlogget(request):
         return RedirectResponse("/admin", status_code=303)
     nå = datetime.now()
+
+    # Auto-opprett alle måneder Jan–nåværende for inneværende år
+    for m in range(1, nå.month + 1):
+        trivsel_opprett_utsendelse(nå.year, m)
+        # Auto-steng måneder eldre enn 10 dager etter siste dag
+        with db() as con:
+            u = con.execute(
+                "SELECT id, stengt, opprettet, åpen_dager FROM trivsel_utsendelser WHERE år=? AND måned=?",
+                (nå.year, m)
+            ).fetchone()
+            if u and not u["stengt"] and m < nå.month:
+                # Steng foregående måneder automatisk hvis de er eldre
+                try:
+                    åpnet = datetime.fromisoformat(u["opprettet"])
+                    if nå > åpnet + timedelta(days=u["åpen_dager"]):
+                        con.execute("UPDATE trivsel_utsendelser SET stengt=1 WHERE id=?", (u["id"],))
+                except Exception:
+                    pass
+
     with db() as con:
         utsendelser = con.execute(
             "SELECT * FROM trivsel_utsendelser ORDER BY år DESC, måned DESC"
@@ -1024,13 +1056,19 @@ async def admin_trivsel(request: Request):
                   min_svar=TRIVSEL_MIN_SVAR,
                   melding=request.query_params.get("melding", ""))
 
-@app.post("/admin/trivsel/utsendelse/{år}/{måned}")
-async def admin_trivsel_opprett(år: int, måned: int, request: Request):
+@app.post("/admin/trivsel/start")
+async def admin_trivsel_start(request: Request):
+    """Start eller gjenåpne en trivsel-runde for valgt måned/år."""
     if not er_innlogget(request):
         return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    try:
+        år   = int(form.get("år",   0))
+        måned = int(form.get("måned", 0))
+    except (ValueError, TypeError):
+        return RedirectResponse("/admin/trivsel?melding=Ugyldig+dato", status_code=303)
     if not (1 <= måned <= 12 and 2020 <= år <= 2035):
-        from fastapi import HTTPException as _H
-        raise _H(400, "Ugyldig dato")
+        return RedirectResponse("/admin/trivsel?melding=Ugyldig+dato", status_code=303)
     trivsel_opprett_utsendelse(år, måned)
     return RedirectResponse(f"/admin/trivsel/lenker/{år}/{måned}", status_code=303)
 
