@@ -814,9 +814,15 @@ async def api_brukere(request: Request, key: Optional[str] = Query(default=None)
     api_key_ok = EXPORT_API_KEY and key and secrets.compare_digest(key, EXPORT_API_KEY)
     if not api_key_ok:
         return JSONResponse({"error": "Ikke autorisert"}, status_code=403)
+    base = str(request.base_url).rstrip("/")
     with db() as con:
-        rader = con.execute("SELECT navn, epost FROM brukere ORDER BY navn").fetchall()
-    return JSONResponse([{"navn": r["navn"], "epost": r["epost"]} for r in rader])
+        rader = con.execute("SELECT token, navn, epost FROM brukere ORDER BY navn").fetchall()
+    return JSONResponse([{
+        "token": r["token"],
+        "navn":  r["navn"],
+        "epost": r["epost"],
+        "link":  f"{base}/puls/{r['token']}",
+    } for r in rader])
 
 @app.get("/admin/fordeling", response_class=HTMLResponse)
 async def admin_fordeling_get(request: Request,
