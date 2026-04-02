@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trivsel Admin — Kverva</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --blue:#1e3a5f; --sea:#0d9488; --bg:#f1f5f9; --card:#fff;
+      --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px;
+      --green:#16a34a; --red:#dc2626;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
+    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .hdr-logo { font-size:1.1rem; font-weight:700; letter-spacing:.04em; }
+    .hdr-logo span { color:#93c5fd; }
+    .hdr-sub { font-size:.78rem; color:#93c5fd; margin-top:2px; }
+    .back { color:#93c5fd; font-size:.82rem; text-decoration:none; }
+    .back:hover { color:#fff; }
+    .wrap { max-width:700px; margin:0 auto; padding:28px 16px; display:flex; flex-direction:column; gap:24px; }
+    .card { background:var(--card); border-radius:var(--radius); border:1px solid var(--border); padding:24px; }
+    .card h2 { font-size:1rem; font-weight:600; margin-bottom:16px; color:var(--blue); }
+    .flash { padding:12px 16px; border-radius:8px; font-size:.9rem; font-weight:500; }
+    .flash.ok { background:#dcfce7; color:#166534; }
+
+    /* Periode-rad */
+    .periode-rad { display:flex; align-items:center; gap:12px; padding:14px; background:var(--bg); border-radius:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .periode-info { flex:1; min-width:140px; }
+    .periode-tittel { font-weight:700; font-size:.95rem; color:var(--blue); }
+    .periode-sub { font-size:.78rem; color:var(--muted); margin-top:2px; }
+    .badge { font-size:.72rem; font-weight:700; padding:2px 10px; border-radius:99px; white-space:nowrap; }
+    .badge.ok    { background:#d1fae5; color:#065f46; }
+    .badge.åpen  { background:#dbeafe; color:#1e40af; }
+    .badge.stengt{ background:#f1f5f9; color:#64748b; }
+    .badge.skjult{ background:#fef3c7; color:#92400e; }
+
+    /* Score */
+    .score-boks { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; font-size:.85rem; display:flex; gap:20px; flex-wrap:wrap; }
+    .score-linje { display:flex; flex-direction:column; align-items:center; }
+    .score-tall { font-size:1.4rem; font-weight:800; color:var(--sea); line-height:1; }
+    .score-label { font-size:.7rem; color:var(--muted); margin-top:2px; }
+
+    /* Knapper */
+    .btn-lenker { background:var(--sea); color:#fff; border:none; border-radius:8px; padding:7px 14px; font-size:.8rem; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; white-space:nowrap; }
+    .btn-lenker:hover { background:#0f766e; }
+    .btn-steng { background:none; border:1px solid #fca5a5; color:var(--red); border-radius:8px; padding:6px 12px; font-size:.78rem; cursor:pointer; white-space:nowrap; }
+    .btn-steng:hover { background:#fee2e2; }
+
+    /* Ny utsendelse */
+    .ny-form { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+    .ny-form label { font-size:.82rem; font-weight:600; color:var(--blue); margin-bottom:4px; display:block; }
+    .ny-form select, .ny-form input { border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:.9rem; font-family:inherit; background:#fff; }
+    .ny-form select:focus, .ny-form input:focus { outline:2px solid var(--sea); border-color:transparent; }
+    .btn-add { background:var(--sea); color:#fff; border:none; border-radius:8px; padding:9px 18px; font-size:.9rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-add:hover { background:#0f766e; }
+
+    .progress-bar { width:100%; height:6px; background:#e2e8f0; border-radius:99px; overflow:hidden; margin-top:6px; }
+    .progress-fill { height:100%; background:var(--sea); border-radius:99px; transition:width .3s; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="hdr-logo">Kverva <span>Trivsel</span></div>
+    <div class="hdr-sub">Admin</div>
+  </div>
+  <a href="/admin" class="back">← Puls admin</a>
+</header>
+
+<div class="wrap">
+
+  {% if melding %}
+  <div class="flash ok">{{ melding }}</div>
+  {% endif %}
+
+  <!-- NY UTSENDELSE -->
+  <div class="card">
+    <h2>Start ny månedsrunde</h2>
+    <form method="post" id="ny-form" class="ny-form">
+      <div>
+        <label>Måned</label>
+        <select name="måned" id="sel-måned">
+          {% for navn in månednavn %}
+          <option value="{{ loop.index }}" {% if loop.index == default_måned %}selected{% endif %}>{{ navn }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>År</label>
+        <input type="number" name="år" id="inp-år" value="{{ default_år }}" min="2024" max="2035" style="width:90px"/>
+      </div>
+      <button type="submit" class="btn-add" onclick="settAction()">Start runde → vis lenker</button>
+    </form>
+    <p style="font-size:.78rem;color:var(--muted);margin-top:10px">Lenker er personlige og engangsbruk. Eksisterende runde gjenbrukes (idempotent).</p>
+  </div>
+
+  <!-- HISTORIKK -->
+  {% if måneder %}
+  <div class="card">
+    <h2>Alle runder</h2>
+    {% for m in måneder %}
+    <div class="periode-rad">
+      <div class="periode-info">
+        <div class="periode-tittel">{{ m.måned }} {{ m.år }}</div>
+        <div class="periode-sub">{{ m.svart }} / {{ m.totalt }} svart</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:{{ m.pst }}%"></div></div>
+      </div>
+
+      {% if m.stengt %}
+        <span class="badge stengt">Stengt</span>
+      {% else %}
+        <span class="badge åpen">Åpen</span>
+      {% endif %}
+
+      {% if m.res.skjult %}
+        <span class="badge skjult">Under {{ min_svar }} svar — skjult</span>
+      {% else %}
+        <div class="score-boks">
+          <div class="score-linje">
+            <div class="score-tall">{{ m.res.snitt_trivsel }}</div>
+            <div class="score-label">Motivasjon</div>
+          </div>
+          <div class="score-linje">
+            <div class="score-tall">{{ m.res.snitt_samarbeid }}</div>
+            <div class="score-label">Samarbeid</div>
+          </div>
+        </div>
+      {% endif %}
+
+      <a class="btn-lenker" href="/admin/trivsel/lenker/{{ m.år }}/{{ m.måned_nr }}">Lenker</a>
+
+      {% if not m.stengt %}
+      <form method="post" action="/admin/trivsel/steng/{{ m.id }}" style="margin:0">
+        <button class="btn-steng" type="submit" onclick="return confirm('Steng {{ m.måned }} {{ m.år }}?')">Steng</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+function settAction() {
+  const m = document.getElementById('sel-måned').value;
+  const å = document.getElementById('inp-år').value;
+  document.getElementById('ny-form').action = `/admin/trivsel/utsendelse/${å}/${m}`;
+}
+// Set on load so user can just click without changing
+document.addEventListener('DOMContentLoaded', settAction);
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trivsel — Kverva</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --blue:   #1e3a5f;
+      --sea:    #0d9488;
+      --bg:     #f0f9f8;
+      --card:   #ffffff;
+      --border: #d1fae5;
+      --text:   #1e293b;
+      --muted:  #64748b;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg); color: var(--text);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 32px 16px 60px;
+    }
+    .card {
+      background: var(--card); border-radius: var(--radius);
+      border: 1px solid var(--border); padding: 32px;
+      width: 100%; max-width: 520px;
+      box-shadow: 0 4px 24px rgba(13,148,136,.08);
+    }
+    .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+    .logo-mark {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: linear-gradient(135deg, #0d9488, #1e3a5f);
+      display: grid; place-items: center;
+      font-size: 1.2rem; color: #fff;
+    }
+    .logo-text .t1 { font-weight: 800; font-size: 1rem; color: var(--blue); }
+    .logo-text .t2 { font-size: .75rem; color: var(--muted); margin-top: 1px; }
+    .period {
+      display: inline-block; background: #d1fae5; color: #065f46;
+      border-radius: 99px; padding: 4px 12px;
+      font-size: .78rem; font-weight: 700; margin-bottom: 16px;
+    }
+    h1 { font-size: 1.25rem; font-weight: 800; color: var(--blue); margin-bottom: 6px; }
+    .intro { font-size: .88rem; color: var(--muted); line-height: 1.6; margin-bottom: 28px; }
+    .spørsmål { margin-bottom: 28px; }
+    .spørsmål-label { font-size: .95rem; font-weight: 700; color: var(--blue); margin-bottom: 6px; }
+    .spørsmål-sub { font-size: .8rem; color: var(--muted); margin-bottom: 14px; }
+    .scale-wrap { display: flex; flex-direction: column; gap: 8px; }
+    .scale-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .scale-btn {
+      aspect-ratio: 1; border: 2px solid #e2e8f0; border-radius: 10px;
+      background: #f8fafc; font-size: .95rem; font-weight: 700;
+      cursor: pointer; transition: all .14s ease; color: var(--text);
+      display: grid; place-items: center;
+    }
+    .scale-btn:hover { border-color: var(--sea); background: #f0fdfa; color: var(--sea); }
+    .scale-btn.valgt {
+      border-color: var(--sea); background: var(--sea);
+      color: #fff; box-shadow: 0 2px 8px rgba(13,148,136,.25);
+    }
+    .scale-labels { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); }
+    .send-btn {
+      width: 100%; background: var(--sea); color: #fff; border: none;
+      border-radius: 12px; padding: 14px; font-size: 1rem; font-weight: 700;
+      font-family: inherit; cursor: pointer; transition: all .15s ease;
+    }
+    .send-btn:hover { background: #0f766e; }
+    .send-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .feil-melding {
+      background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+      padding: 10px 14px; color: #991b1b; font-size: .85rem;
+      margin-bottom: 16px; display: none;
+    }
+    .feil-melding.vis { display: block; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">🏔</div>
+    <div class="logo-text">
+      <div class="t1">Kverva</div>
+      <div class="t2">Medarbeiderundersøkelse</div>
+    </div>
+  </div>
+  <div class="period">{{ måned }} {{ år }}</div>
+  <h1>Hvordan har du det?</h1>
+  <p class="intro">To raske spørsmål om trivsel og samarbeid. Det tar under ett minutt.</p>
+
+  <div class="feil-melding" id="feil">Du må svare på begge spørsmålene.</div>
+
+  <form method="post" action="/trivsel/{{ survey_token }}" id="skjema">
+    <input type="hidden" name="trivsel"   id="inp-trivsel"/>
+    <input type="hidden" name="samarbeid" id="inp-samarbeid"/>
+
+    <div class="spørsmål">
+      <div class="spørsmål-label">1. Jeg er motivert og engasjert i mitt arbeid</div>
+      <div class="spørsmål-sub">1 = Helt uenig · 7 = Helt enig</div>
+      <div class="scale-wrap">
+        <div class="scale-row" id="scale-trivsel">
+          {% for i in range(1, 8) %}
+          <button type="button" class="scale-btn" onclick="velg('trivsel', {{ i }}, this)">{{ i }}</button>
+          {% endfor %}
+        </div>
+        <div class="scale-labels"><span>Helt uenig</span><span>Helt enig</span></div>
+      </div>
+    </div>
+
+    <div class="spørsmål">
+      <div class="spørsmål-label">2. Jeg synes vi samarbeider godt i Kverva</div>
+      <div class="spørsmål-sub">1 = Helt uenig · 7 = Helt enig</div>
+      <div class="scale-wrap">
+        <div class="scale-row" id="scale-samarbeid">
+          {% for i in range(1, 8) %}
+          <button type="button" class="scale-btn" onclick="velg('samarbeid', {{ i }}, this)">{{ i }}</button>
+          {% endfor %}
+        </div>
+        <div class="scale-labels"><span>Helt uenig</span><span>Helt enig</span></div>
+      </div>
+    </div>
+
+    <button type="submit" class="send-btn" id="send-btn" onclick="return valider()">Send svar</button>
+  </form>
+</div>
+<script>
+  const valgt = { trivsel: null, samarbeid: null };
+  function velg(felt, verdi, btn) {
+    valgt[felt] = verdi;
+    document.getElementById('inp-' + felt).value = verdi;
+    document.querySelectorAll(`#scale-${felt} .scale-btn`).forEach(b => b.classList.remove('valgt'));
+    btn.classList.add('valgt');
+  }
+  function valider() {
+    if (!valgt.trivsel || !valgt.samarbeid) {
+      document.getElementById('feil').classList.add('vis');
+      return false;
+    }
+    document.getElementById('feil').classList.remove('vis');
+    document.getElementById('send-btn').disabled = true;
+    document.getElementById('send-btn').textContent = 'Sender…';
+    return true;
+  }
+</script>
+</body>
+</html>

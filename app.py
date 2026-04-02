@@ -82,6 +82,29 @@ def init_db():
                 tidspunkt TEXT NOT NULL,
                 UNIQUE(token, uke, år)
             );
+            CREATE TABLE IF NOT EXISTS trivsel_utsendelser (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                måned      INTEGER NOT NULL,
+                år         INTEGER NOT NULL,
+                opprettet  TEXT NOT NULL,
+                åpen_dager INTEGER NOT NULL DEFAULT 10,
+                stengt     INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(måned, år)
+            );
+            CREATE TABLE IF NOT EXISTS trivsel_tokens (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                survey_token  TEXT UNIQUE NOT NULL,
+                utsendelse_id INTEGER NOT NULL,
+                bruker_token  TEXT NOT NULL,
+                brukt         INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS trivsel_svar (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                utsendelse_id INTEGER NOT NULL,
+                trivsel       INTEGER NOT NULL,
+                samarbeid     INTEGER NOT NULL,
+                innsendt      TEXT NOT NULL
+            );
         """)
         # Migrering: legg til kategori-kolonne hvis den ikke finnes
         cols = [r[1] for r in con.execute("PRAGMA table_info(investeringer)").fetchall()]
@@ -831,6 +854,242 @@ async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=puls_eksport.csv"},
     )
+
+
+# ── Trivsel ───────────────────────────────────────────────────────────────────
+
+TRIVSEL_MIN_SVAR = 3
+
+def trivsel_er_stengt(u) -> bool:
+    if u["stengt"]:
+        return True
+    try:
+        åpnet = datetime.fromisoformat(u["opprettet"])
+        return datetime.now() > åpnet + timedelta(days=u["åpen_dager"])
+    except Exception:
+        return False
+
+def trivsel_opprett_utsendelse(år: int, måned: int) -> tuple[int, list]:
+    """Oppretter utsendelse + survey_tokens for alle aktive brukere. Idempotent."""
+    with db() as con:
+        rad = con.execute(
+            "SELECT id FROM trivsel_utsendelser WHERE år=? AND måned=?", (år, måned)
+        ).fetchone()
+        if rad:
+            uid = rad["id"]
+        else:
+            con.execute(
+                "INSERT INTO trivsel_utsendelser (måned, år, opprettet) VALUES (?,?,?)",
+                (måned, år, datetime.now().isoformat())
+            )
+            uid = con.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        brukere_rader = con.execute("SELECT token, navn, epost FROM brukere").fetchall()
+        resultat = []
+        for b in brukere_rader:
+            eks = con.execute(
+                "SELECT survey_token FROM trivsel_tokens WHERE utsendelse_id=? AND bruker_token=?",
+                (uid, b["token"])
+            ).fetchone()
+            if eks:
+                stok = eks["survey_token"]
+            else:
+                stok = secrets.token_urlsafe(24)
+                con.execute(
+                    "INSERT INTO trivsel_tokens (survey_token, utsendelse_id, bruker_token) VALUES (?,?,?)",
+                    (stok, uid, b["token"])
+                )
+            resultat.append({"navn": b["navn"], "epost": b["epost"], "survey_token": stok})
+    return uid, resultat
+
+def trivsel_hent_resultater(utsendelse_id: int) -> dict:
+    with db() as con:
+        rader = con.execute(
+            "SELECT trivsel, samarbeid FROM trivsel_svar WHERE utsendelse_id=?",
+            (utsendelse_id,)
+        ).fetchall()
+    antall = len(rader)
+    if antall < TRIVSEL_MIN_SVAR:
+        return {"antall": antall, "skjult": True}
+    snitt_t = sum(r["trivsel"]   for r in rader) / antall
+    snitt_s = sum(r["samarbeid"] for r in rader) / antall
+    dist_t = {i: 0 for i in range(1, 8)}
+    dist_s = {i: 0 for i in range(1, 8)}
+    for r in rader:
+        dist_t[r["trivsel"]]   += 1
+        dist_s[r["samarbeid"]] += 1
+    return {
+        "antall": antall,
+        "skjult": False,
+        "snitt_trivsel":   round(snitt_t, 1),
+        "snitt_samarbeid": round(snitt_s, 1),
+        "dist_trivsel":    dist_t,
+        "dist_samarbeid":  dist_s,
+    }
+
+@app.get("/trivsel/{survey_token}", response_class=HTMLResponse)
+async def trivsel_vis_skjema(survey_token: str):
+    with db() as con:
+        row = con.execute("""
+            SELECT tt.id, tt.brukt, tt.utsendelse_id,
+                   tu.måned, tu.år, tu.stengt, tu.åpen_dager, tu.opprettet
+            FROM trivsel_tokens tt
+            JOIN trivsel_utsendelser tu ON tu.id = tt.utsendelse_id
+            WHERE tt.survey_token = ?
+        """, (survey_token,)).fetchone()
+    if not row:
+        return render("trivsel_feil.html", melding="Lenken er ugyldig eller utløpt.")
+    måned_navn = MÅNEDS_NAVN[row["måned"] - 1]
+    if trivsel_er_stengt(row):
+        return render("trivsel_stengt.html", måned=måned_navn, år=row["år"])
+    if row["brukt"]:
+        return render("trivsel_allerede_svart.html", måned=måned_navn, år=row["år"])
+    return render("trivsel_svar.html",
+                  survey_token=survey_token,
+                  måned=måned_navn, år=row["år"])
+
+@app.post("/trivsel/{survey_token}")
+async def trivsel_send_svar(survey_token: str, request: Request):
+    form = await request.form()
+    try:
+        trivsel_score   = int(form.get("trivsel",   0))
+        samarbeid_score = int(form.get("samarbeid", 0))
+    except (TypeError, ValueError):
+        from fastapi import HTTPException as _H
+        raise _H(400, "Ugyldig input")
+    if not (1 <= trivsel_score <= 7 and 1 <= samarbeid_score <= 7):
+        from fastapi import HTTPException as _H
+        raise _H(400, "Score må være mellom 1 og 7")
+    with db() as con:
+        tok = con.execute(
+            "SELECT id, brukt, utsendelse_id FROM trivsel_tokens WHERE survey_token=?",
+            (survey_token,)
+        ).fetchone()
+        if not tok:
+            from fastapi import HTTPException as _H
+            raise _H(404)
+        if tok["brukt"]:
+            return RedirectResponse("/trivsel/allerede-svart", status_code=303)
+        con.execute("UPDATE trivsel_tokens SET brukt=1 WHERE survey_token=?", (survey_token,))
+        con.execute(
+            "INSERT INTO trivsel_svar (utsendelse_id, trivsel, samarbeid, innsendt) VALUES (?,?,?,?)",
+            (tok["utsendelse_id"], trivsel_score, samarbeid_score, datetime.now().isoformat())
+        )
+    return RedirectResponse("/trivsel/takk", status_code=303)
+
+@app.get("/trivsel/takk", response_class=HTMLResponse)
+async def trivsel_takk():
+    return render("trivsel_takk.html")
+
+@app.get("/trivsel/allerede-svart", response_class=HTMLResponse)
+async def trivsel_allerede_svart():
+    return render("trivsel_allerede_svart.html", måned="", år="")
+
+@app.get("/admin/trivsel", response_class=HTMLResponse)
+async def admin_trivsel(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    nå = datetime.now()
+    with db() as con:
+        utsendelser = con.execute(
+            "SELECT * FROM trivsel_utsendelser ORDER BY år DESC, måned DESC"
+        ).fetchall()
+        antall_brukere = con.execute("SELECT COUNT(*) FROM brukere").fetchone()[0]
+
+    måneder_data = []
+    for u in utsendelser:
+        res = trivsel_hent_resultater(u["id"])
+        with db() as con:
+            totalt = con.execute("SELECT COUNT(*) FROM trivsel_tokens WHERE utsendelse_id=?", (u["id"],)).fetchone()[0]
+            svart  = con.execute("SELECT COUNT(*) FROM trivsel_tokens WHERE utsendelse_id=? AND brukt=1", (u["id"],)).fetchone()[0]
+        stengt_nå = trivsel_er_stengt(u)
+        måneder_data.append({
+            "id":       u["id"],
+            "måned":    MÅNEDS_NAVN[u["måned"] - 1],
+            "måned_nr": u["måned"],
+            "år":       u["år"],
+            "totalt":   totalt,
+            "svart":    svart,
+            "pst":      round(svart / totalt * 100) if totalt else 0,
+            "res":      res,
+            "stengt":   stengt_nå,
+        })
+
+    return render("admin_trivsel.html",
+                  måneder=måneder_data,
+                  antall_brukere=antall_brukere,
+                  default_måned=nå.month,
+                  default_år=nå.year,
+                  månednavn=MÅNEDS_NAVN,
+                  min_svar=TRIVSEL_MIN_SVAR,
+                  melding=request.query_params.get("melding", ""))
+
+@app.post("/admin/trivsel/utsendelse/{år}/{måned}")
+async def admin_trivsel_opprett(år: int, måned: int, request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    if not (1 <= måned <= 12 and 2020 <= år <= 2035):
+        from fastapi import HTTPException as _H
+        raise _H(400, "Ugyldig dato")
+    trivsel_opprett_utsendelse(år, måned)
+    return RedirectResponse(f"/admin/trivsel/lenker/{år}/{måned}", status_code=303)
+
+@app.post("/admin/trivsel/steng/{uid}")
+async def admin_trivsel_steng(uid: int, request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    with db() as con:
+        con.execute("UPDATE trivsel_utsendelser SET stengt=1 WHERE id=?", (uid,))
+    return RedirectResponse("/admin/trivsel?melding=Periode+stengt", status_code=303)
+
+@app.get("/admin/trivsel/lenker/{år}/{måned}", response_class=HTMLResponse)
+async def admin_trivsel_lenker(år: int, måned: int, request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    with db() as con:
+        u = con.execute(
+            "SELECT id FROM trivsel_utsendelser WHERE år=? AND måned=?", (år, måned)
+        ).fetchone()
+        if not u:
+            from fastapi import HTTPException as _H
+            raise _H(404, "Utsendelse ikke funnet")
+        rader = con.execute("""
+            SELECT b.navn, b.epost, tt.survey_token, tt.brukt
+            FROM trivsel_tokens tt
+            JOIN brukere b ON b.token = tt.bruker_token
+            WHERE tt.utsendelse_id = ?
+            ORDER BY b.navn
+        """, (u["id"],)).fetchall()
+    base = str(request.base_url).rstrip("/")
+    lenker = [
+        {
+            "navn":   r["navn"],
+            "epost":  r["epost"],
+            "link":   f"{base}/trivsel/{r['survey_token']}",
+            "brukt":  bool(r["brukt"]),
+        }
+        for r in rader
+    ]
+    svart = sum(1 for l in lenker if l["brukt"])
+    return render("trivsel_lenker.html",
+                  lenker=lenker,
+                  måned=MÅNEDS_NAVN[måned - 1],
+                  år=år,
+                  svart=svart)
+
+@app.get("/api/trivsel/lenker/{år}/{måned}")
+async def api_trivsel_lenker(år: int, måned: int, request: Request):
+    """Power Automate: hent survey-lenker for utsending via e-post."""
+    key = request.query_params.get("api_key") or request.headers.get("x-api-key", "")
+    if not (EXPORT_API_KEY and secrets.compare_digest(key, EXPORT_API_KEY)):
+        from fastapi import HTTPException as _H
+        raise _H(401, "Ugyldig API-nøkkel")
+    _, tokens = trivsel_opprett_utsendelse(år, måned)
+    base = str(request.base_url).rstrip("/")
+    return JSONResponse([
+        {"navn": t["navn"], "epost": t["epost"], "link": f"{base}/trivsel/{t['survey_token']}"}
+        for t in tokens
+    ])
 
 
 if __name__ == "__main__":

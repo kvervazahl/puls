@@ -125,15 +125,25 @@
   <div class="flash ok">{{ melding }}</div>
   {% endif %}
 
-  <!-- KOSTNADSFORDELING SNARVEI -->
-  <a href="/admin/fordeling" style="display:flex;align-items:center;gap:12px;background:var(--blue);color:#fff;border-radius:var(--radius);padding:18px 24px;text-decoration:none;font-weight:600;">
-    <span style="font-size:1.3rem">📊</span>
-    <div>
-      <div>Kostnadsfordeling</div>
-      <div style="font-size:.78rem;color:#93c5fd;font-weight:400;margin-top:2px">Fordel månedlige kostnader per investering</div>
-    </div>
-    <span style="margin-left:auto;font-size:1.1rem">→</span>
-  </a>
+  <!-- SNARVEI-RAD -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <a href="/admin/fordeling" style="flex:1;min-width:200px;display:flex;align-items:center;gap:12px;background:var(--blue);color:#fff;border-radius:var(--radius);padding:18px 24px;text-decoration:none;font-weight:600;">
+      <span style="font-size:1.3rem">📊</span>
+      <div>
+        <div>Kostnadsfordeling</div>
+        <div style="font-size:.78rem;color:#93c5fd;font-weight:400;margin-top:2px">Fordel månedlige kostnader per investering</div>
+      </div>
+      <span style="margin-left:auto;font-size:1.1rem">→</span>
+    </a>
+    <a href="/admin/trivsel" style="flex:1;min-width:200px;display:flex;align-items:center;gap:12px;background:#0d9488;color:#fff;border-radius:var(--radius);padding:18px 24px;text-decoration:none;font-weight:600;">
+      <span style="font-size:1.3rem">😊</span>
+      <div>
+        <div>Trivsel</div>
+        <div style="font-size:.78rem;color:#99f6e4;font-weight:400;margin-top:2px">Medarbeiderundersøkelse — resultater og lenker</div>
+      </div>
+      <span style="margin-left:auto;font-size:1.1rem">→</span>
+    </a>
+  </div>
 
   <!-- BRUKERE -->
   <div class="card">

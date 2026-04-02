@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Allerede svart — Kverva Trivsel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --blue:#1e3a5f; --bg:#f0f9f8; --card:#fff; --border:#d1fae5; --muted:#64748b; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:40px 32px; max-width:460px; width:100%; text-align:center; box-shadow:0 4px 24px rgba(13,148,136,.08); }
+    .icon { font-size:2.5rem; margin-bottom:16px; }
+    h1 { font-size:1.2rem; font-weight:800; color:var(--blue); margin-bottom:10px; }
+    p { font-size:.9rem; color:var(--muted); line-height:1.6; }
+    .periode { display:inline-block; background:#d1fae5; color:#065f46; border-radius:99px; padding:4px 14px; font-size:.78rem; font-weight:700; margin-bottom:16px; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">👍</div>
+  {% if måned %}<div class="periode">{{ måned }} {{ år }}</div>{% endif %}
+  <h1>Du har allerede svart</h1>
+  <p>Vi har allerede registrert ditt svar for denne perioden. Takk!</p>
+</div>
+</body>
+</html>

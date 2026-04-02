@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trivsel lenker — {{ måned }} {{ år }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root { --blue:#1e3a5f; --sea:#0d9488; --bg:#f1f5f9; --card:#fff; --border:#e2e8f0; --text:#1e293b; --muted:#64748b; --radius:14px; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:48px; }
+    header { background:var(--blue); color:#fff; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; }
+    .hdr-logo { font-size:1.1rem; font-weight:700; }
+    .hdr-logo span { color:#93c5fd; }
+    .wrap { max-width:700px; margin:0 auto; padding:28px 16px; display:flex; flex-direction:column; gap:20px; }
+    .card { background:var(--card); border-radius:var(--radius); border:1px solid var(--border); padding:24px; }
+    .card h2 { font-size:1rem; font-weight:600; margin-bottom:16px; color:var(--blue); }
+    .lenke-rad { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border-radius:8px; margin-bottom:8px; }
+    .navn { font-weight:600; font-size:.9rem; min-width:140px; }
+    .url { font-family:monospace; font-size:.75rem; color:var(--muted); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .badge { font-size:.72rem; font-weight:700; padding:2px 10px; border-radius:99px; white-space:nowrap; }
+    .badge.svart { background:#d1fae5; color:#065f46; }
+    .badge.ikke   { background:#fef3c7; color:#92400e; }
+    .btn-copy { background:var(--sea); color:#fff; border:none; border-radius:6px; padding:5px 12px; font-size:.78rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-copy:hover { background:#0f766e; }
+    .btn-copy.kopiert { background:#16a34a; }
+    .back { color:#93c5fd; font-size:.85rem; text-decoration:none; }
+    .back:hover { color:#fff; }
+    .stat { display:inline-block; background:#d1fae5; color:#065f46; border-radius:99px; padding:4px 14px; font-size:.8rem; font-weight:700; margin-bottom:16px; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="hdr-logo">Kverva <span>Trivsel</span> — {{ måned }} {{ år }}</div>
+  <a href="/admin/trivsel" class="back">← Tilbake</a>
+</header>
+<div class="wrap">
+  <div class="card">
+    <div class="stat">{{ svart }} / {{ lenker|length }} har svart</div>
+    <h2>Personlige lenker</h2>
+    {% for l in lenker %}
+    <div class="lenke-rad">
+      <div class="navn">{{ l.navn }}</div>
+      <div class="url">{{ l.link }}</div>
+      <span class="badge {{ 'svart' if l.brukt else 'ikke' }}">{{ 'Svart' if l.brukt else 'Ikke svart' }}</span>
+      <button class="btn-copy" onclick="kopier(this, '{{ l.link }}')">Kopier</button>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+<script>
+function kopier(btn, url) {
+  navigator.clipboard.writeText(url).then(() => {
+    btn.textContent = 'Kopiert!';
+    btn.classList.add('kopiert');
+    setTimeout(() => { btn.textContent = 'Kopier'; btn.classList.remove('kopiert'); }, 2000);
+  });
+}
+</script>
+</body>
+</html>
