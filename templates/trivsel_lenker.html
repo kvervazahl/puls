@@ -51,6 +51,8 @@
     .btn-copy.kopiert { background:var(--green); }
     .btn-mail { background:#fff; border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 11px; font-size:.76rem; font-weight:600; text-decoration:none; white-space:nowrap; }
     .btn-mail:hover { background:var(--bg); }
+    .btn-nullstill { background:none; border:1px solid #fca5a5; color:#dc2626; border-radius:6px; padding:4px 10px; font-size:.72rem; cursor:pointer; white-space:nowrap; }
+    .btn-nullstill:hover { background:#fee2e2; }
 
     /* Ikke svart-seksjon */
     .seksjons-header { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); padding:8px 0 6px; border-bottom:1px solid var(--border); margin-bottom:10px; margin-top:16px; }
@@ -115,6 +117,13 @@
         <div class="person-epost">{{ l.epost }}</div>
       </div>
       <span class="badge svart">Svart</span>
+      <form method="post" action="/admin/trivsel/nullstill-svar" style="margin:0">
+        <input type="hidden" name="survey_token" value="{{ l.survey_token }}"/>
+        <input type="hidden" name="year" value="{{ år }}"/>
+        <input type="hidden" name="month" value="{{ måned_nr }}"/>
+        <button class="btn-nullstill" type="submit"
+          onclick="return confirm('Nullstill {{ l.navn }} sitt svar? (for testing)')">↩ Nullstill</button>
+      </form>
     </div>
     {% endfor %}
     {% endif %}

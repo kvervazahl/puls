@@ -47,7 +47,7 @@ FAKTA_FIL = DATA_DIR / "fakta_puls.xlsx"
 
 @contextmanager
 def db():
-    con = sqlite3.connect(DB_FIL)
+    con = sqlite3.connect(DB_FIL, timeout=15)
     con.row_factory = sqlite3.Row
     try:
         yield con
@@ -1136,6 +1136,31 @@ async def admin_trivsel_testdata(uid: int, request: Request):
             )
     return RedirectResponse(f"/admin/trivsel?melding={antall}+testsvar+lagt+inn", status_code=303)
 
+@app.post("/admin/trivsel/nullstill-svar")
+async def admin_trivsel_nullstill(request: Request):
+    """Nullstill én persons svar — for testing."""
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    survey_token = (form.get("survey_token") or "").strip()
+    year  = int(form.get("year",  0) or 0)
+    month = int(form.get("month", 0) or 0)
+    if survey_token:
+        with db() as con:
+            tok = con.execute(
+                "SELECT id, utsendelse_id FROM trivsel_tokens WHERE survey_token=? AND brukt=1",
+                (survey_token,)
+            ).fetchone()
+            if tok:
+                con.execute("""
+                    DELETE FROM trivsel_svar WHERE id = (
+                        SELECT id FROM trivsel_svar
+                        WHERE utsendelse_id=? ORDER BY id DESC LIMIT 1
+                    )
+                """, (tok["utsendelse_id"],))
+                con.execute("UPDATE trivsel_tokens SET brukt=0 WHERE id=?", (tok["id"],))
+    return RedirectResponse(f"/admin/trivsel/lenker/{year}/{month}", status_code=303)
+
 @app.get("/admin/trivsel/lenker/{year}/{month}", response_class=HTMLResponse)
 async def admin_trivsel_lenker(year: int, month: int, request: Request):
     if not er_innlogget(request):
@@ -1155,10 +1180,11 @@ async def admin_trivsel_lenker(year: int, month: int, request: Request):
     base = str(request.base_url).rstrip("/")
     lenker = [
         {
-            "navn":   r["navn"],
-            "epost":  r["epost"],
-            "link":   f"{base}/trivsel/{r['survey_token']}",
-            "brukt":  bool(r["brukt"]),
+            "navn":         r["navn"],
+            "epost":        r["epost"],
+            "link":         f"{base}/trivsel/{r['survey_token']}",
+            "survey_token": r["survey_token"],
+            "brukt":        bool(r["brukt"]),
         }
         for r in rader
     ]
@@ -1166,6 +1192,7 @@ async def admin_trivsel_lenker(year: int, month: int, request: Request):
     return render("trivsel_lenker.html",
                   lenker=lenker,
                   måned=MÅNEDS_NAVN[month - 1],
+                  måned_nr=month,
                   år=year,
                   svart=svart)
 
