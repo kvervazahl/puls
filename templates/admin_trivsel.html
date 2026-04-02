@@ -185,13 +185,15 @@
         <div>
           <div class="bruker-navn">{{ b.navn }}</div>
           <div class="bruker-epost">{{ b.epost }}</div>
+          {% if b.trivsel_token %}
           <div class="lenke-boks">
-            <input class="lenke-input" readonly value="https://puls-kverva.azurewebsites.net/trivsel/{{ token }}" id="link-{{ token }}">
+            <input class="lenke-input" readonly value="https://puls-kverva.azurewebsites.net/trivsel/{{ b.trivsel_token }}" id="link-{{ token }}">
             <button class="kopier-btn" onclick="kopier('{{ token }}')">Kopier</button>
           </div>
+          {% endif %}
         </div>
         <div>
-          {% if token in svart_tokens %}
+          {% if b.trivsel_token and b.trivsel_token in svart_tokens %}
           <span class="status-pill status-ok">✓ Svart</span>
           {% else %}
           <span class="status-pill status-nei">Ikke svart</span>
