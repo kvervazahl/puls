@@ -992,6 +992,43 @@ async def trivsel_takk_get():
 async def trivsel_allerede_svart_get():
     return render("trivsel_allerede_svart.html", måned="", år="")
 
+@app.get("/trivsel", response_class=HTMLResponse)
+async def trivsel_generisk_vis():
+    """Generisk trivsel-lenke — ingen token, åpen for alle, ingen sperre mot dobbelsvar."""
+    with db() as con:
+        u = con.execute(
+            "SELECT * FROM trivsel_utsendelser WHERE stengt=0 ORDER BY år DESC, måned DESC LIMIT 1"
+        ).fetchone()
+    if not u:
+        return render("trivsel_stengt.html", måned="", år="")
+    måned_navn = MÅNEDS_NAVN[u["måned"] - 1]
+    return render("trivsel_svar.html", survey_token=None, måned=måned_navn, år=u["år"], forhåndsvis=False)
+
+@app.post("/trivsel", response_class=HTMLResponse)
+async def trivsel_generisk_svar(request: Request):
+    """Ta imot svar fra generisk lenke — lagres anonymt på åpen periode."""
+    with db() as con:
+        u = con.execute(
+            "SELECT * FROM trivsel_utsendelser WHERE stengt=0 ORDER BY år DESC, måned DESC LIMIT 1"
+        ).fetchone()
+    if not u:
+        return render("trivsel_stengt.html", måned="", år="")
+    form = await request.form()
+    try:
+        trivsel_score   = int(form.get("trivsel",   0))
+        samarbeid_score = int(form.get("samarbeid", 0))
+    except ValueError:
+        return render("trivsel_feil.html")
+    if not (1 <= trivsel_score <= 7 and 1 <= samarbeid_score <= 7):
+        return render("trivsel_feil.html")
+    with db() as con:
+        con.execute(
+            "INSERT INTO trivsel_svar (utsendelse_id, trivsel, samarbeid, innsendt) VALUES (?,?,?,?)",
+            (u["id"], trivsel_score, samarbeid_score, datetime.now().isoformat())
+        )
+    måned_navn = MÅNEDS_NAVN[u["måned"] - 1]
+    return render("trivsel_takk.html", måned=måned_navn, år=u["år"])
+
 @app.get("/trivsel/{survey_token}", response_class=HTMLResponse)
 async def trivsel_vis_skjema(survey_token: str):
     with db() as con:

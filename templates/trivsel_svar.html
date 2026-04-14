@@ -99,7 +99,7 @@
 
   <div class="feil-melding" id="feil">Du må svare på begge spørsmålene.</div>
 
-  <form method="post" action="/trivsel/{{ survey_token }}" id="skjema">
+  <form method="post" action="{% if survey_token %}/trivsel/{{ survey_token }}{% else %}/trivsel{% endif %}" id="skjema">
     <input type="hidden" name="trivsel"   id="inp-trivsel"/>
     <input type="hidden" name="samarbeid" id="inp-samarbeid"/>
 
