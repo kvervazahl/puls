@@ -52,15 +52,18 @@ def migrer():
         );
     """)
 
-    # Brukere
+    # Brukere — seed kun hvis tabellen er helt tom (unngår å legge til testdata etter go-live)
+    antall_brukere = con.execute("SELECT COUNT(*) FROM brukere").fetchone()[0]
     brukere = les_json(BRUKERE_FIL, {})
-    if brukere:
+    if brukere and antall_brukere == 0:
         for token, b in brukere.items():
             con.execute(
                 "INSERT OR IGNORE INTO brukere (token, navn, epost) VALUES (?,?,?)",
                 (token, b["navn"], b["epost"])
             )
         print(f"  Migrerte {len(brukere)} brukere")
+    elif antall_brukere > 0:
+        print(f"  Brukere allerede satt opp ({antall_brukere} stk) — hopper over seed")
 
     # Investeringer
     inv = les_json(INV_FIL, [])
