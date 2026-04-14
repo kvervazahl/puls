@@ -917,6 +917,16 @@ async def eksport_csv(request: Request, key: Optional[str] = Query(default=None)
 
 TRIVSEL_MIN_SVAR = 3
 
+def sikre_gjeldende_periode():
+    """Sørg for at inneværende måned alltid har en åpen periode, og steng alle tidligere måneder."""
+    nå = datetime.now()
+    trivsel_opprett_utsendelse(nå.year, nå.month)
+    with db() as con:
+        con.execute("""
+            UPDATE trivsel_utsendelser SET stengt=1
+            WHERE stengt=0 AND (år < ? OR (år=? AND måned < ?))
+        """, (nå.year, nå.year, nå.month))
+
 def trivsel_er_stengt(u) -> bool:
     if u["stengt"]:
         return True
@@ -995,6 +1005,7 @@ async def trivsel_allerede_svart_get():
 @app.get("/trivsel", response_class=HTMLResponse)
 async def trivsel_generisk_vis():
     """Generisk trivsel-lenke — ingen token, åpen for alle, ingen sperre mot dobbelsvar."""
+    sikre_gjeldende_periode()
     with db() as con:
         u = con.execute(
             "SELECT * FROM trivsel_utsendelser WHERE stengt=0 ORDER BY år DESC, måned DESC LIMIT 1"
@@ -1085,24 +1096,7 @@ async def admin_trivsel(request: Request):
     if not er_innlogget(request):
         return RedirectResponse("/admin", status_code=303)
     nå = datetime.now()
-
-    # Auto-opprett alle måneder Jan–nåværende for inneværende år
-    for m in range(1, nå.month + 1):
-        trivsel_opprett_utsendelse(nå.year, m)
-        # Auto-steng måneder eldre enn 10 dager etter siste dag
-        with db() as con:
-            u = con.execute(
-                "SELECT id, stengt, opprettet, åpen_dager FROM trivsel_utsendelser WHERE år=? AND måned=?",
-                (nå.year, m)
-            ).fetchone()
-            if u and not u["stengt"] and m < nå.month:
-                # Steng foregående måneder automatisk hvis de er eldre
-                try:
-                    åpnet = datetime.fromisoformat(u["opprettet"])
-                    if nå > åpnet + timedelta(days=u["åpen_dager"]):
-                        con.execute("UPDATE trivsel_utsendelser SET stengt=1 WHERE id=?", (u["id"],))
-                except Exception:
-                    pass
+    sikre_gjeldende_periode()
 
     with db() as con:
         utsendelser = con.execute(
