@@ -1239,5 +1239,45 @@ async def api_trivsel_lenker(year: int, month: int, request: Request):
     ])
 
 
+@app.get("/admin/migrering-navn-fiks")
+async def admin_mig_navn(request: Request):
+    if not er_innlogget(request):
+        return JSONResponse({"feil": "ikke innlogget"}, status_code=401)
+    ops = [
+        # Merge initials → aktiv bruker
+        ("ees@kverva.no",  "erik.ehrenpohl.sand@kverva.no", "erik",     "Erik Ehrenpohl Sand"),
+        ("esan@kverva.no", "erik.ehrenpohl.sand@kverva.no", "erik",     "Erik Ehrenpohl Sand"),
+        ("ev@kverva.no",   "eirik.vabo@kverva.no",          "eirik",    "Eirik Vabo"),
+        ("fs@kverva.no",   "frode.sandmark@kverva.no",      "frode",    "Frode Sandmark"),
+        ("mg@kverva.no",   "mats.gabrielsen@kverva.no",     "mats.g",   "Mats Gabrielsen"),
+        ("mm@kverva.no",   "mats.malvig@kverva.no",         "mats.m",   "Mats Malvig"),
+        ("psc@kverva.no",  "pernille@kverva.no",            "pernille", "Pernille Skarstein"),
+        ("sh@kverva.no",   "synne@kverva.no",               "synne",    "Synne Hårstad"),
+        ("ts@kverva.no",   "torgeir.svae@kverva.no",        "torgeir",  "Torgeir Svae"),
+        # Merge initials → historisk person
+        ("af@kverva.no",   "amund.fjortoft@kverva.no",      "amund-fjortoft", "Amund Fjortoft"),
+        ("ea@kverva.no",   "edvin.aspli@kverva.no",         "edvin-aspli",    "Edvin Aspli"),
+        ("rj@kverva.no",   "rune.juliussen@kverva.no",      "rune-juliussen", "Rune Juliussen"),
+        ("ro@kverva.no",   "roar.ostbo@kverva.no",          "roar-ostbo",     "Roar Østbø"),
+        ("tj@kverva.no",   "thomas.jessen@kverva.no",       "thomas-jessen",  "Thomas Jessen"),
+    ]
+    navn_fix = [
+        ("en@kverva.no",                  "Erlend Nikolaisen"),
+        ("roar.ostbo@kverva.no",          "Roar Østbø"),
+        ("simen.orndal.nilsen@kverva.no", "Simen Orndal Nilsen"),
+    ]
+    total = 0
+    with db() as con:
+        for gammel, ny_epost, ny_token, ny_navn in ops:
+            con.execute("DELETE FROM svar WHERE epost=? AND EXISTS (SELECT 1 FROM svar b WHERE b.epost=? AND b.uke=svar.uke AND b.år=svar.år)", (gammel, ny_epost))
+            con.execute("UPDATE svar SET token=?, navn=?, epost=? WHERE epost=?", (ny_token, ny_navn, ny_epost, gammel))
+            total += con.execute("SELECT changes()").fetchone()[0]
+        for epost, navn in navn_fix:
+            con.execute("UPDATE svar SET navn=? WHERE epost=?", (navn, epost))
+            total += con.execute("SELECT changes()").fetchone()[0]
+    with db() as con:
+        n = con.execute("SELECT COUNT(*) FROM svar").fetchone()[0]
+    return JSONResponse({"ok": True, "oppdatert": total, "totalt_svar": n})
+
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8502, reload=True, app_dir=str(BASE))
