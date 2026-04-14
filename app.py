@@ -116,6 +116,8 @@ def init_db():
             con.execute("ALTER TABLE brukere ADD COLUMN lønn INTEGER NOT NULL DEFAULT 0")
         if "team" not in cols_b:
             con.execute("ALTER TABLE brukere ADD COLUMN team TEXT NOT NULL DEFAULT 'investering'")
+        if "aktiv" not in cols_b:
+            con.execute("ALTER TABLE brukere ADD COLUMN aktiv INTEGER NOT NULL DEFAULT 1")
         # Migrering: trivsel_svar fra gammelt skjema (runde_id/spm1/spm2) til nytt
         cols_ts = [r[1] for r in con.execute("PRAGMA table_info(trivsel_svar)").fetchall()]
         if cols_ts and "utsendelse_id" not in cols_ts:
@@ -182,8 +184,12 @@ def finn_bruker(token: str):
 
 def hent_alle_brukere() -> dict:
     with db() as con:
-        rader = con.execute("SELECT token, navn, epost, lønn, team FROM brukere").fetchall()
-    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"], "team": r["team"]} for r in rader}
+        rader = con.execute("SELECT token, navn, epost, lønn, team, aktiv FROM brukere").fetchall()
+    return {r["token"]: {"navn": r["navn"], "epost": r["epost"], "lønn": r["lønn"], "team": r["team"], "aktiv": r["aktiv"]} for r in rader}
+
+def sett_aktiv_bruker(token: str, aktiv: int):
+    with db() as con:
+        con.execute("UPDATE brukere SET aktiv=? WHERE token=?", (aktiv, token))
 
 def lagre_bruker(token: str, navn: str, epost: str):
     with db() as con:
@@ -345,7 +351,7 @@ def all_time_toppliste() -> list:
     return sorted([{"navn": n, **v} for n, v in poeng.items()], key=lambda x: -x["poeng"])[:8]
 
 def hall_of_shame_liste(nå_uke: int, nå_år: int) -> list:
-    brukere = hent_alle_brukere()
+    brukere = {t: b for t, b in hent_alle_brukere().items() if b["aktiv"]}
     resultat = []
     for token, b in brukere.items():
         with db() as con:
@@ -736,6 +742,20 @@ async def admin_fjern_bruker(request: Request):
     navn = fjern_bruker(token)
     return RedirectResponse(f"/admin?melding={navn}+fjernet", status_code=303)
 
+@app.post("/admin/brukere/sett-aktiv")
+async def admin_sett_aktiv(request: Request):
+    if not er_innlogget(request):
+        return RedirectResponse("/admin", status_code=303)
+    form = await request.form()
+    token = form.get("token", "").strip()
+    aktiv = int(form.get("aktiv", "1"))
+    sett_aktiv_bruker(token, aktiv)
+    with db() as con:
+        navn = con.execute("SELECT navn FROM brukere WHERE token=?", (token,)).fetchone()
+    navn = navn["navn"] if navn else token
+    status = "aktivert" if aktiv else "deaktivert"
+    return RedirectResponse(f"/admin?melding={navn}+{status}", status_code=303)
+
 @app.post("/admin/investeringer/legg-til")
 async def admin_legg_til_inv(request: Request):
     if not er_innlogget(request):
@@ -919,7 +939,7 @@ def trivsel_opprett_utsendelse(år: int, måned: int) -> tuple[int, list]:
             )
             uid = con.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        brukere_rader = con.execute("SELECT token, navn, epost FROM brukere").fetchall()
+        brukere_rader = con.execute("SELECT token, navn, epost FROM brukere WHERE aktiv=1").fetchall()
         resultat = []
         for b in brukere_rader:
             eks = con.execute(

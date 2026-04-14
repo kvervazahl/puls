@@ -36,6 +36,11 @@
     .list-item-actions { display: flex; align-items: center; gap: 8px; }
     .btn-fjern { background: none; border: 1px solid #fca5a5; color: var(--red); border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; white-space: nowrap; }
     .btn-fjern:hover { background: #fee2e2; }
+    .btn-deaktiver { background: none; border: 1px solid #d1d5db; color: #6b7280; border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; white-space: nowrap; }
+    .btn-deaktiver:hover { background: #f3f4f6; }
+    .btn-aktiver { background: none; border: 1px solid #86efac; color: #16a34a; border-radius: 6px; padding: 4px 12px; font-size: .8rem; cursor: pointer; white-space: nowrap; }
+    .btn-aktiver:hover { background: #f0fdf4; }
+    .bruker-inaktiv { opacity: 0.45; }
     .add-form { display: flex; gap: 8px; flex-wrap: wrap; }
     .add-form input, .add-form select { flex: 1; min-width: 120px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 12px; font-size: .9rem; font-family: inherit; background: #fff; }
     .add-form input:focus, .add-form select:focus { outline: 2px solid var(--accent); border-color: transparent; }
@@ -150,11 +155,13 @@
     <h2>Brukere</h2>
     <div class="list">
       {% for token, b in brukere.items() %}
-      <div class="list-item">
+      <div class="list-item {% if not b.aktiv %}bruker-inaktiv{% endif %}">
         <div class="list-item-left">
           <strong>{{ b.navn }}</strong>
+          {% if not b.aktiv %}<span style="font-size:.75rem;color:#9ca3af;margin-left:6px">· inaktiv</span>{% endif %}
           <div class="meta">{{ b.epost }} &nbsp;·&nbsp; <span class="token-box">{{ token }}</span></div>
           <div class="meta">Link: /puls/{{ token }}</div>
+          {% if b.aktiv %}
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
             <form method="post" action="/admin/brukere/sett-lønn" style="margin:0;display:flex;gap:6px;align-items:center">
               <input type="hidden" name="token" value="{{ token }}"/>
@@ -171,11 +178,24 @@
               <button type="submit" class="btn-kat-save" style="font-size:.78rem">Lagre team</button>
             </form>
           </div>
+          {% endif %}
         </div>
-        <form method="post" action="/admin/brukere/fjern" style="margin:0">
-          <input type="hidden" name="token" value="{{ token }}"/>
-          <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ b.navn }}?')">Fjern</button>
-        </form>
+        <div style="display:flex;gap:6px;align-items:center">
+          <form method="post" action="/admin/brukere/sett-aktiv" style="margin:0">
+            <input type="hidden" name="token" value="{{ token }}"/>
+            {% if b.aktiv %}
+              <input type="hidden" name="aktiv" value="0"/>
+              <button class="btn-deaktiver" type="submit">Deaktiver</button>
+            {% else %}
+              <input type="hidden" name="aktiv" value="1"/>
+              <button class="btn-aktiver" type="submit">Aktiver</button>
+            {% endif %}
+          </form>
+          <form method="post" action="/admin/brukere/fjern" style="margin:0">
+            <input type="hidden" name="token" value="{{ token }}"/>
+            <button class="btn-fjern" type="submit" onclick="return confirm('Fjern {{ b.navn }}?')">Fjern</button>
+          </form>
+        </div>
       </div>
       {% else %}
       <div style="color:var(--muted);font-size:.9rem">Ingen brukere ennå.</div>
