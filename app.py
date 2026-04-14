@@ -1137,32 +1137,6 @@ async def admin_trivsel_preview(request: Request):
                   år=nå.year,
                   forhåndsvis=True)
 
-@app.post("/admin/trivsel/testdata/{uid}")
-async def admin_trivsel_testdata(uid: int, request: Request):
-    """Generer 5 tilfeldige testsvar for en utsendelse (vises som demo-data)."""
-    if not er_innlogget(request):
-        return RedirectResponse("/admin", status_code=303)
-    import random as _r
-    with db() as con:
-        u = con.execute("SELECT id, måned, år FROM trivsel_utsendelser WHERE id=?", (uid,)).fetchone()
-        if not u:
-            return RedirectResponse("/admin/trivsel", status_code=303)
-        # Hent tokens som ikke er brukt
-        ubrukte = con.execute(
-            "SELECT survey_token, bruker_token FROM trivsel_tokens WHERE utsendelse_id=? AND brukt=0",
-            (uid,)
-        ).fetchall()
-        antall = min(5, len(ubrukte))
-        valgte = _r.sample(list(ubrukte), antall)
-        for t in valgte:
-            trivsel_score   = _r.randint(4, 7)
-            samarbeid_score = _r.randint(4, 7)
-            con.execute("UPDATE trivsel_tokens SET brukt=1 WHERE survey_token=?", (t["survey_token"],))
-            con.execute(
-                "INSERT INTO trivsel_svar (utsendelse_id, trivsel, samarbeid, innsendt) VALUES (?,?,?,?)",
-                (uid, trivsel_score, samarbeid_score, datetime.now().isoformat())
-            )
-    return RedirectResponse(f"/admin/trivsel?melding={antall}+testsvar+lagt+inn", status_code=303)
 
 @app.post("/admin/trivsel/nullstill-svar")
 async def admin_trivsel_nullstill(request: Request):
