@@ -138,7 +138,6 @@
       {% endif %}
 
       {% if not m.stengt %}
-      <a class="btn-lenker" href="/admin/trivsel/lenker/{{ m.år }}/{{ m.måned_nr }}">Lenker →</a>
       <form method="post" action="/admin/trivsel/steng/{{ m.id }}" style="margin:0">
         <button class="btn-steng" type="submit" onclick="return confirm('Steng {{ m.måned }} {{ m.år }}?')">Steng</button>
       </form>
