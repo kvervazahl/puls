@@ -1239,5 +1239,17 @@ async def api_trivsel_lenker(year: int, month: int, request: Request):
     ])
 
 
+@app.get("/admin/migrering-simen")
+async def admin_mig_simen(request: Request):
+    if not er_innlogget(request):
+        return JSONResponse({"feil": "ikke innlogget"}, status_code=401)
+    with db() as con:
+        con.execute("DELETE FROM svar WHERE epost='simen.orndal.nilsen@kverva.no' AND EXISTS (SELECT 1 FROM svar b WHERE b.epost='son@kverva.no' AND b.uke=svar.uke AND b.år=svar.år)")
+        con.execute("UPDATE svar SET token='simen', navn='Simen Nilsen', epost='son@kverva.no' WHERE epost='simen.orndal.nilsen@kverva.no'")
+    with db() as con:
+        n = con.execute("SELECT COUNT(*) FROM svar").fetchone()[0]
+        s = con.execute("SELECT COUNT(*) FROM svar WHERE token='simen'").fetchone()[0]
+    return JSONResponse({"ok": True, "simen_rader": s, "totalt_svar": n})
+
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8502, reload=True, app_dir=str(BASE))
