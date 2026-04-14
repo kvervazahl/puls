@@ -1239,21 +1239,5 @@ async def api_trivsel_lenker(year: int, month: int, request: Request):
     ])
 
 
-@app.post("/admin/migrering-historikk")
-async def admin_mig_historikk(request: Request):
-    if not er_innlogget(request):
-        return JSONResponse({"feil": "ikke innlogget"}, status_code=401)
-    body = await request.json()
-    rader = body.get("rader", [])
-    with db() as con:
-        for r in rader:
-            con.execute(
-                "INSERT OR IGNORE INTO svar (token,navn,epost,uke,år,fravar,timer,total,tidspunkt) VALUES (?,?,?,?,?,?,?,?,?)",
-                r
-            )
-    with db() as con:
-        n = con.execute("SELECT COUNT(*) FROM svar").fetchone()[0]
-    return JSONResponse({"ok": True, "totalt_svar": n, "mottatt": len(rader)})
-
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8502, reload=True, app_dir=str(BASE))
