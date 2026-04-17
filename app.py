@@ -672,7 +672,10 @@ async def stats(request: Request, token: str):
     if not bruker:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Ugyldig lenke.</h1>", status_code=404)
     nå_uke, nå_år = get_uke_år()
-    vis_uke, vis_år = siste_aktive_uke()
+    if date.today().weekday() == 4:
+        vis_uke, vis_år = nå_uke, nå_år
+    else:
+        vis_uke, vis_år = (52, nå_år - 1) if nå_uke == 1 else (nå_uke - 1, nå_år)
     return render("stats.html",
         bruker=bruker, token=token, uke=nå_uke, år=nå_år,
         uke_ranking=ranker_uke(vis_uke, vis_år),
