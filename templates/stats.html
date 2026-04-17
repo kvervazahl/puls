@@ -133,22 +133,22 @@
   </div>
   {% endif %}
 
-  <!-- ── MÅNEDEN ── -->
+  <!-- ── UKE RANKING ── -->
   <div class="card">
-    <div class="card-title">📅 {{ nå_måned_navn }} — raskest i snitt</div>
-    {% if måneds %}
-    {% for r in måneds %}
+    <div class="card-title">⚡ {{ uke_label }}</div>
+    {% if uke_ranking %}
+    {% for r in uke_ranking %}
     <div class="rank-row">
       <div class="rank-pos">
         {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}{{ loop.index }}.{% endif %}
       </div>
       <div class="rank-name">{{ r.navn }}</div>
-      <div class="rank-time">{{ r.snitt_fmt }} snitt · {{ r.antall }} uker</div>
-      {% if loop.index == 1 %}<span class="rank-badge badge-gold">Månedens beste</span>{% endif %}
+      <div class="rank-time">{{ r.delta_fmt }} etter kl. 12</div>
+      {% if loop.index == 1 %}<span class="rank-badge badge-gold">Ukens raskeste</span>{% endif %}
     </div>
     {% endfor %}
     {% else %}
-    <div class="empty">Ingen data for denne måneden enda.</div>
+    <div class="empty">Ingen har rapportert enda.</div>
     {% endif %}
   </div>
 

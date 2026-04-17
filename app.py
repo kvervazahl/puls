@@ -658,12 +658,15 @@ async def stats(request: Request, token: str):
     if not bruker:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Ugyldig lenke.</h1>", status_code=404)
     nå_uke, nå_år = get_uke_år()
-    nå_måned = date.today().month
+    er_fredag = date.today().weekday() == 4
+    if er_fredag:
+        vis_uke, vis_år = nå_uke, nå_år
+    else:
+        vis_uke, vis_år = (52, nå_år - 1) if nå_uke == 1 else (nå_uke - 1, nå_år)
     return render("stats.html",
         bruker=bruker, token=token, uke=nå_uke, år=nå_år,
-        denne_uken=ranker_uke(nå_uke, nå_år),
-        måneds=måneds_ranking(nå_måned, nå_år),
-        nå_måned_navn=date(nå_år, nå_måned, 1).strftime("%B %Y").capitalize(),
+        uke_ranking=ranker_uke(vis_uke, vis_år),
+        uke_label=f"Uke {vis_uke} — raskest",
         alltime=all_time_toppliste(),
         shame=hall_of_shame_liste(nå_uke, nå_år),
         mine=personlig_stats(token, nå_uke, nå_år),
