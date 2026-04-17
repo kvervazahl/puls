@@ -311,17 +311,27 @@ def fmt_delta(minutter: float) -> str:
     return f"{m // 60}t {m % 60:02d}min"
 
 def ranker_uke(uke: int, år: int) -> list:
-    t0 = fredag_kl_12(uke, år)
+    aktive_tokens = {t for t, b in hent_alle_brukere().items() if b["aktiv"]}
     with db() as con:
         rader = con.execute(
             "SELECT * FROM svar WHERE uke=? AND år=? AND fravar=0", (uke, år)
         ).fetchall()
     resultat = []
     for r in rader:
+        if r["token"] not in aktive_tokens:
+            continue
         s = _rad_til_svar(r)
-        delta = max(0, (datetime.fromisoformat(s["tidspunkt"]) - t0).total_seconds() / 60)
-        resultat.append({"navn": s["navn"].split()[0], "delta_min": delta, "delta_fmt": fmt_delta(delta), "total": s.get("total", 0)})
-    return sorted(resultat, key=lambda x: x["delta_min"])
+        resultat.append({
+            "navn": s["navn"].split()[0],
+            "tidspunkt": s["tidspunkt"],
+            "tidspunkt_fmt": datetime.fromisoformat(s["tidspunkt"]).strftime("%H:%M"),
+        })
+    return sorted(resultat, key=lambda x: x["tidspunkt"])[:5]
+
+def siste_aktive_uke() -> tuple:
+    with db() as con:
+        r = con.execute("SELECT uke, år FROM svar ORDER BY år DESC, uke DESC LIMIT 1").fetchone()
+    return (r["uke"], r["år"]) if r else get_uke_år()
 
 def måneds_ranking(måned: int, år: int) -> list:
     with db() as con:
@@ -658,11 +668,7 @@ async def stats(request: Request, token: str):
     if not bruker:
         return HTMLResponse("<h1 style='font-family:sans-serif;padding:40px'>Ugyldig lenke.</h1>", status_code=404)
     nå_uke, nå_år = get_uke_år()
-    er_fredag = date.today().weekday() == 4
-    if er_fredag:
-        vis_uke, vis_år = nå_uke, nå_år
-    else:
-        vis_uke, vis_år = (52, nå_år - 1) if nå_uke == 1 else (nå_uke - 1, nå_år)
+    vis_uke, vis_år = siste_aktive_uke()
     return render("stats.html",
         bruker=bruker, token=token, uke=nå_uke, år=nå_år,
         uke_ranking=ranker_uke(vis_uke, vis_år),

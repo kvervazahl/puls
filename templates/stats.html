@@ -143,7 +143,7 @@
         {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}{{ loop.index }}.{% endif %}
       </div>
       <div class="rank-name">{{ r.navn }}</div>
-      <div class="rank-time">{{ r.delta_fmt }} etter kl. 12</div>
+      <div class="rank-time">kl. {{ r.tidspunkt_fmt }}</div>
       {% if loop.index == 1 %}<span class="rank-badge badge-gold">Ukens raskeste</span>{% endif %}
     </div>
     {% endfor %}
