@@ -175,7 +175,9 @@
 {% if historikk %}
 const hist = {{ historikk | tojson }};
 const COLORS = ['#1e3a5f','#4f8ef7','#16a34a','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
-const invListe = {{ historikk[0].timer.keys() | list | tojson }};
+const allKeys = new Set();
+hist.forEach(s => { Object.keys(s.timer).forEach(n => allKeys.add(n)); });
+const invListe = [...allKeys];
 const totals = {};
 invListe.forEach(n => totals[n] = 0);
 hist.forEach(s => { invListe.forEach(n => { totals[n] += (s.timer[n] || 0); }); });
