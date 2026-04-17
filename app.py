@@ -312,6 +312,7 @@ def fmt_delta(minutter: float) -> str:
 
 def ranker_uke(uke: int, år: int) -> list:
     aktive_tokens = {t for t, b in hent_alle_brukere().items() if b["aktiv"]}
+    åpnet = fredag_kl_12(uke, år)
     with db() as con:
         rader = con.execute(
             "SELECT * FROM svar WHERE uke=? AND år=? AND fravar=0", (uke, år)
@@ -321,10 +322,13 @@ def ranker_uke(uke: int, år: int) -> list:
         if r["token"] not in aktive_tokens:
             continue
         s = _rad_til_svar(r)
+        tidspunkt_dt = datetime.fromisoformat(s["tidspunkt"])
+        if tidspunkt_dt < åpnet:
+            continue
         resultat.append({
             "navn": s["navn"].split()[0],
             "tidspunkt": s["tidspunkt"],
-            "tidspunkt_fmt": datetime.fromisoformat(s["tidspunkt"]).strftime("%H:%M"),
+            "tidspunkt_fmt": tidspunkt_dt.strftime("%H:%M"),
         })
     return sorted(resultat, key=lambda x: x["tidspunkt"])[:5]
 
